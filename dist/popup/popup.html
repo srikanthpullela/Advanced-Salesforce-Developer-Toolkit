@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SF Dev Toolkit</title>
+  <style>
+    :root {
+      --bg: #0f0f1a;
+      --bg2: #16162a;
+      --bg3: #1e1e38;
+      --bg-hover: #252548;
+      --fg: #e2e8f0;
+      --fg2: #94a3b8;
+      --fg3: #64748b;
+      --accent: #818cf8;
+      --accent2: #6366f1;
+      --accent-glow: rgba(129, 140, 248, 0.15);
+      --green: #34d399;
+      --red: #f87171;
+      --border: rgba(255, 255, 255, 0.06);
+      --border2: rgba(255, 255, 255, 0.1);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 360px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--fg);
+      overflow-x: hidden;
+    }
+
+    .popup-header {
+      background: linear-gradient(135deg, var(--accent2), #7c3aed);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .popup-logo {
+      width: 36px;
+      height: 36px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+    }
+
+    .popup-logo svg {
+      width: 20px;
+      height: 20px;
+      color: #fff;
+    }
+
+    .popup-title h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .popup-title span {
+      font-size: 11px;
+      color: rgba(255,255,255,0.65);
+    }
+
+    .popup-status {
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+      flex-shrink: 0;
+    }
+
+    .dot.connected {
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+    }
+
+    .popup-section {
+      padding: 16px 16px 8px;
+    }
+
+    .popup-section h2 {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--fg3);
+      margin-bottom: 10px;
+      padding-left: 4px;
+    }
+
+    .popup-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .popup-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s ease;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .popup-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent-glow), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .popup-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .popup-btn:hover::before {
+      opacity: 1;
+    }
+
+    .popup-btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-icon.icon-search { background: rgba(129,140,248,0.15); color: #818cf8; }
+    .btn-icon.icon-inspect { background: rgba(56,189,248,0.15); color: #38bdf8; }
+    .btn-icon.icon-soql { background: rgba(52,211,153,0.15); color: #34d399; }
+    .btn-icon.icon-nav { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .btn-icon.icon-refresh { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    .btn-icon.icon-clear { background: rgba(248,113,113,0.1); color: #f87171; }
+
+    .popup-btn:hover .btn-icon { filter: brightness(1.2); }
+
+    .btn-content {
+      flex: 1;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-label {
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: -0.2px;
+    }
+
+    .btn-shortcut {
+      font-size: 10px;
+      color: var(--fg3);
+      font-family: 'SF Mono', Consolas, monospace;
+      margin-top: 2px;
+    }
+
+    .popup-btn:hover .btn-shortcut {
+      color: var(--fg2);
+    }
+
+    .btn-arrow {
+      color: var(--fg3);
+      position: relative;
+      z-index: 1;
+      transition: transform 0.2s;
+    }
+
+    .btn-arrow svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .popup-btn:hover .btn-arrow {
+      color: var(--accent);
+      transform: translateX(2px);
+    }
+
+    .popup-info {
+      padding: 12px 20px 16px;
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+    }
+
+    .popup-info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      font-size: 12px;
+    }
+
+    .popup-info-label { color: var(--fg3); }
+
+    .popup-info-value {
+      color: var(--fg2);
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px;
+      background: var(--bg3);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .popup-footer {
+      padding: 12px 20px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--fg3);
+      border-top: 1px solid var(--border);
+      letter-spacing: 0.3px;
+    }
+
+    .not-salesforce {
+      padding: 48px 24px;
+      text-align: center;
+    }
+
+    .not-salesforce .nf-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 16px;
+      background: var(--bg3);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--fg3);
+    }
+
+    .not-salesforce .nf-icon svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .not-salesforce h2 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+
+    .not-salesforce p {
+      color: var(--fg3);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="popup-header">
+    <div class="popup-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    </div>
+    <div class="popup-title">
+      <h1>SF Developer Toolkit</h1>
+      <span id="popup-version">v1.0.0</span>
+    </div>
+  </div>
+
+  <div id="popup-content">
+    <div class="popup-status">
+      <span class="dot" id="popup-dot"></span>
+      <span id="popup-status-text">Checking connection...</span>
+    </div>
+
+    <div class="popup-section">
+      <h2>Quick Actions</h2>
+      <div class="popup-actions">
+        <button class="popup-btn" id="btn-search">
+          <span class="btn-icon icon-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <div class="btn-content">
+            <div class="btn-label">Global Search</div>
+            <div class="btn-shortcut">Ctrl+Shift+P</div>
+          </div>
+          <span class="btn-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="popup-btn" id="btn-inspector">
+          <span class="btn-icon icon-inspect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+          <div class="btn-content">
+            <div class="btn-label">Record Inspector</div>
+            <div class="btn-shortcut">Ctrl+Shift+I</div>
+          </div>
+          <span class="btn-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="popup-btn" id="btn-soql">
+          <span class="btn-icon icon-soql">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </span>
+          <div class="btn-content">
+            <div class="btn-label">SOQL Query Tool</div>
+            <div class="btn-shortcut">Ctrl+Shift+Q</div>
+          </div>
+          <span class="btn-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="popup-btn" id="btn-navigator">
+          <span class="btn-icon icon-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+          </span>
+          <div class="btn-content">
+            <div class="btn-label">Smart Navigator</div>
+            <div class="btn-shortcut">Ctrl+Shift+N</div>
+          </div>
+          <span class="btn-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="popup-section">
+      <h2>Settings</h2>
+      <div class="popup-actions">
+        <button class="popup-btn" id="btn-refresh-cache">
+          <span class="btn-icon icon-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </span>
+          <div class="btn-content">
+            <div class="btn-label">Refresh Metadata Cache</div>
+          </div>
+        </button>
+        <button class="popup-btn" id="btn-clear-cache">
+          <span class="btn-icon icon-clear">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </span>
+          <div class="btn-content">
+            <div class="btn-label">Clear All Cache</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <div class="popup-info" id="popup-info">
+      <div class="popup-info-row">
+        <span class="popup-info-label">Instance</span>
+        <span class="popup-info-value" id="popup-instance">&mdash;</span>
+      </div>
+      <div class="popup-info-row">
+        <span class="popup-info-label">Org ID</span>
+        <span class="popup-info-value" id="popup-org">&mdash;</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="popup-not-sf" style="display:none">
+    <div class="not-salesforce">
+      <div class="nf-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <h2>Not a Salesforce Page</h2>
+      <p>Navigate to a Salesforce org to use the Developer Toolkit.</p>
+    </div>
+  </div>
+
+  <div class="popup-footer">
+    Advanced Salesforce Developer Toolkit &middot; Phase 1
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

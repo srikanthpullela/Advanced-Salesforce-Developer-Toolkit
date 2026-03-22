@@ -1,0 +1,1214 @@
+/**
+ * Advanced Salesforce Developer Toolkit — Unified Stylesheet
+ * Dark theme inspired by VSCode Command Palette.
+ * All component styles are scoped under `sfdt-` prefix to avoid conflicts with Salesforce CSS.
+ */
+
+/* ─── CSS Variables ──────────────────────────────────── */
+
+:root {
+  --sfdt-bg: #1e1e2e;
+  --sfdt-bg2: #252536;
+  --sfdt-bg3: #2d2d44;
+  --sfdt-bg-hover: #363652;
+  --sfdt-bg-selected: #3d3d5c;
+  --sfdt-fg: #cdd6f4;
+  --sfdt-fg2: #a6adc8;
+  --sfdt-fg3: #7f849c;
+  --sfdt-accent: #89b4fa;
+  --sfdt-accent2: #74c7ec;
+  --sfdt-green: #a6e3a1;
+  --sfdt-red: #f38ba8;
+  --sfdt-yellow: #f9e2af;
+  --sfdt-orange: #fab387;
+  --sfdt-purple: #cba6f7;
+  --sfdt-border: #45475a;
+  --sfdt-border-light: #585b70;
+  --sfdt-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --sfdt-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --sfdt-radius: 8px;
+  --sfdt-radius-sm: 4px;
+  --sfdt-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --sfdt-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  --sfdt-z-toolbar: 99990;
+  --sfdt-z-panel: 99995;
+  --sfdt-z-palette: 99999;
+  --sfdt-z-overlay: 100000;
+}
+
+/* ─── Reset & Scoping ────────────────────────────────── */
+
+#sfdt-search-palette *,
+#sfdt-navigator-panel *,
+#sfdt-inspector-panel *,
+#sfdt-soql-panel *,
+#sfdt-toolbar * {
+  box-sizing: border-box;
+  font-family: var(--sfdt-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Command Palette (Search + Navigator) ───────────── */
+
+.sfdt-palette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: var(--sfdt-z-palette);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.sfdt-palette.sfdt-visible {
+  display: flex;
+}
+
+.sfdt-palette-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.sfdt-palette-dialog {
+  position: relative;
+  margin-top: 15vh;
+  width: 680px;
+  max-width: 90vw;
+  max-height: 65vh;
+  background: var(--sfdt-bg);
+  border: 1px solid var(--sfdt-border);
+  border-radius: var(--sfdt-radius);
+  box-shadow: var(--sfdt-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: sfdt-slide-down 0.15s ease-out;
+}
+
+@keyframes sfdt-slide-down {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sfdt-palette-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sfdt-border);
+  background: var(--sfdt-bg2);
+  gap: 10px;
+}
+
+.sfdt-palette-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sfdt-palette-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--sfdt-fg);
+  font-size: 15px;
+  font-family: var(--sfdt-font);
+  padding: 4px 0;
+}
+
+.sfdt-palette-input::placeholder {
+  color: var(--sfdt-fg3);
+}
+
+.sfdt-palette-shortcut {
+  font-size: 11px;
+  color: var(--sfdt-fg3);
+  background: var(--sfdt-bg3);
+  padding: 3px 8px;
+  border-radius: var(--sfdt-radius-sm);
+  font-family: var(--sfdt-mono);
+}
+
+/* ─── Filter Chips ───────────────────────────────────── */
+
+.sfdt-palette-filters {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px;
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sfdt-palette-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.sfdt-filter-chip {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--sfdt-border);
+  background: transparent;
+  color: var(--sfdt-fg2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+
+.sfdt-filter-chip:hover {
+  border-color: var(--sfdt-accent);
+  color: var(--sfdt-accent);
+}
+
+.sfdt-filter-chip.active {
+  background: var(--sfdt-accent);
+  border-color: var(--sfdt-accent);
+  color: var(--sfdt-bg);
+  font-weight: 600;
+}
+
+/* ─── Results List ───────────────────────────────────── */
+
+.sfdt-palette-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sfdt-border) transparent;
+}
+
+.sfdt-palette-results::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sfdt-palette-results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sfdt-palette-results::-webkit-scrollbar-thumb {
+  background: var(--sfdt-border);
+  border-radius: 3px;
+}
+
+.sfdt-palette-result {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  gap: 10px;
+  transition: background 0.08s;
+}
+
+.sfdt-palette-result:hover,
+.sfdt-palette-result.selected {
+  background: var(--sfdt-bg-selected);
+}
+
+.sfdt-result-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sfdt-result-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.sfdt-result-name {
+  font-size: 13px;
+  color: var(--sfdt-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sfdt-result-subtitle {
+  font-size: 11px;
+  color: var(--sfdt-fg3);
+  margin-top: 2px;
+}
+
+.sfdt-result-type {
+  font-size: 10px;
+  color: var(--sfdt-fg3);
+  background: var(--sfdt-bg3);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sfdt-result-arrow {
+  color: var(--sfdt-fg3);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.sfdt-result-code {
+  margin-top: 4px;
+}
+
+.sfdt-code-line {
+  display: block;
+  font-family: var(--sfdt-mono);
+  font-size: 11px;
+  color: var(--sfdt-fg2);
+  padding: 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sfdt-result-symbol {
+  font-size: 11px;
+  color: var(--sfdt-purple);
+  margin-top: 2px;
+}
+
+.sfdt-highlight {
+  background: rgba(137, 180, 250, 0.25);
+  color: var(--sfdt-accent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.sfdt-palette-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--sfdt-fg3);
+  font-size: 13px;
+}
+
+.sfdt-palette-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--sfdt-bg2);
+  border-top: 1px solid var(--sfdt-border);
+  font-size: 11px;
+  color: var(--sfdt-fg3);
+}
+
+/* ─── Navigator Tabs ─────────────────────────────────── */
+
+.sfdt-navigator-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+}
+
+.sfdt-nav-tab {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--sfdt-fg2);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.sfdt-nav-tab:hover {
+  color: var(--sfdt-fg);
+}
+
+.sfdt-nav-tab.active {
+  color: var(--sfdt-accent);
+  border-bottom-color: var(--sfdt-accent);
+}
+
+/* ─── Side Panel (Inspector) ─────────────────────────── */
+
+.sfdt-panel {
+  position: fixed;
+  z-index: var(--sfdt-z-panel);
+  background: var(--sfdt-bg);
+  border: 1px solid var(--sfdt-border);
+  box-shadow: var(--sfdt-shadow);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sfdt-panel.sfdt-visible {
+  display: flex;
+}
+
+.sfdt-panel-right {
+  top: 0;
+  right: 0;
+  width: 480px;
+  max-width: 50vw;
+  height: 100vh;
+  animation: sfdt-slide-left 0.2s ease-out;
+}
+
+@keyframes sfdt-slide-left {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.sfdt-panel-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 45vh;
+  min-height: 300px;
+  border-radius: var(--sfdt-radius) var(--sfdt-radius) 0 0;
+  animation: sfdt-slide-up 0.2s ease-out;
+}
+
+.sfdt-panel-bottom.sfdt-panel-expanded {
+  height: 85vh;
+}
+
+@keyframes sfdt-slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sfdt-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  flex-shrink: 0;
+}
+
+.sfdt-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sfdt-panel-icon {
+  font-size: 16px;
+}
+
+.sfdt-panel-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.sfdt-panel-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  flex-shrink: 0;
+}
+
+.sfdt-panel-search {
+  flex: 1;
+  background: var(--sfdt-bg3);
+  border: 1px solid var(--sfdt-border);
+  border-radius: var(--sfdt-radius-sm);
+  padding: 6px 10px;
+  color: var(--sfdt-fg);
+  font-size: 12px;
+  outline: none;
+}
+
+.sfdt-panel-search:focus {
+  border-color: var(--sfdt-accent);
+}
+
+.sfdt-panel-sort {
+  background: var(--sfdt-bg3);
+  border: 1px solid var(--sfdt-border);
+  border-radius: var(--sfdt-radius-sm);
+  padding: 4px 8px;
+  color: var(--sfdt-fg);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.sfdt-panel-info {
+  padding: 8px 16px;
+  background: var(--sfdt-bg3);
+  border-bottom: 1px solid var(--sfdt-border);
+  flex-shrink: 0;
+}
+
+.sfdt-insp-record-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.sfdt-insp-object {
+  font-weight: 600;
+  color: var(--sfdt-accent);
+}
+
+.sfdt-insp-name {
+  color: var(--sfdt-fg);
+}
+
+.sfdt-insp-id {
+  color: var(--sfdt-fg3);
+  font-family: var(--sfdt-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sfdt-panel-body {
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sfdt-border) transparent;
+}
+
+.sfdt-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sfdt-panel-body::-webkit-scrollbar-thumb {
+  background: var(--sfdt-border);
+  border-radius: 3px;
+}
+
+.sfdt-panel-footer {
+  display: flex;
+  gap: 16px;
+  padding: 6px 16px;
+  background: var(--sfdt-bg2);
+  border-top: 1px solid var(--sfdt-border);
+  font-size: 11px;
+  color: var(--sfdt-fg3);
+  flex-shrink: 0;
+}
+
+.sfdt-panel-loading,
+.sfdt-panel-empty,
+.sfdt-panel-error {
+  padding: 24px;
+  text-align: center;
+  color: var(--sfdt-fg3);
+  font-size: 13px;
+}
+
+.sfdt-panel-error {
+  color: var(--sfdt-red);
+}
+
+/* ─── Field Table (Inspector) ────────────────────────── */
+
+.sfdt-field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sfdt-field-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--sfdt-bg2);
+  z-index: 1;
+}
+
+.sfdt-field-table th {
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--sfdt-fg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  white-space: nowrap;
+}
+
+.sfdt-field-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--sfdt-border);
+  vertical-align: top;
+}
+
+.sfdt-field-row:hover {
+  background: var(--sfdt-bg-hover);
+}
+
+.sfdt-custom-field {
+  border-left: 2px solid var(--sfdt-accent);
+}
+
+.sfdt-td-label {
+  color: var(--sfdt-fg);
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sfdt-td-api {
+  color: var(--sfdt-accent);
+  font-family: var(--sfdt-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sfdt-td-value {
+  color: var(--sfdt-fg);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sfdt-td-type {
+  white-space: nowrap;
+}
+
+.sfdt-td-actions {
+  white-space: nowrap;
+}
+
+.sfdt-null {
+  color: var(--sfdt-fg3);
+  font-style: italic;
+}
+
+.sfdt-relation {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.sfdt-type-string { color: var(--sfdt-green); }
+.sfdt-type-id { color: var(--sfdt-purple); }
+.sfdt-type-reference { color: var(--sfdt-accent2); }
+.sfdt-type-boolean { color: var(--sfdt-orange); }
+.sfdt-type-int, .sfdt-type-integer { color: var(--sfdt-yellow); }
+.sfdt-type-double, .sfdt-type-currency, .sfdt-type-percent { color: var(--sfdt-yellow); }
+.sfdt-type-date, .sfdt-type-datetime { color: var(--sfdt-accent); }
+.sfdt-type-textarea { color: var(--sfdt-green); }
+.sfdt-type-picklist, .sfdt-type-multipicklist { color: var(--sfdt-purple); }
+
+.sfdt-copyable {
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.sfdt-copyable:hover {
+  background: rgba(137, 180, 250, 0.15);
+}
+
+.sfdt-copyable.sfdt-copied {
+  background: rgba(166, 227, 161, 0.2) !important;
+}
+
+.sfdt-td-compare {
+  color: var(--sfdt-fg);
+}
+
+.sfdt-diff {
+  background: rgba(243, 139, 168, 0.15) !important;
+  color: var(--sfdt-red) !important;
+}
+
+.sfdt-inline-input {
+  width: 100%;
+  background: var(--sfdt-bg3);
+  border: 1px solid var(--sfdt-accent);
+  border-radius: var(--sfdt-radius-sm);
+  padding: 3px 6px;
+  color: var(--sfdt-fg);
+  font-size: 12px;
+  font-family: var(--sfdt-font);
+  outline: none;
+}
+
+.sfdt-edit-error {
+  color: var(--sfdt-red);
+  font-size: 11px;
+}
+
+/* ─── JSON Overlay ───────────────────────────────────── */
+
+.sfdt-json-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--sfdt-z-overlay);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sfdt-json-dialog {
+  width: 700px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background: var(--sfdt-bg);
+  border: 1px solid var(--sfdt-border);
+  border-radius: var(--sfdt-radius);
+  box-shadow: var(--sfdt-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sfdt-json-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sfdt-json-header span:first-child {
+  flex: 1;
+}
+
+.sfdt-json-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  font-family: var(--sfdt-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sfdt-fg);
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* ─── Buttons ────────────────────────────────────────── */
+
+.sfdt-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  border: 1px solid var(--sfdt-border);
+  border-radius: var(--sfdt-radius-sm);
+  background: var(--sfdt-bg3);
+  color: var(--sfdt-fg);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.sfdt-btn:hover {
+  border-color: var(--sfdt-accent);
+  color: var(--sfdt-accent);
+}
+
+.sfdt-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sfdt-btn-sm {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.sfdt-btn-primary {
+  background: var(--sfdt-accent);
+  border-color: var(--sfdt-accent);
+  color: var(--sfdt-bg);
+  font-weight: 600;
+}
+
+.sfdt-btn-primary:hover {
+  background: var(--sfdt-accent2);
+  border-color: var(--sfdt-accent2);
+  color: var(--sfdt-bg);
+}
+
+.sfdt-btn-close {
+  font-size: 14px;
+}
+
+.sfdt-btn-close:hover {
+  color: var(--sfdt-red);
+  border-color: var(--sfdt-red);
+}
+
+.sfdt-btn-icon {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.12s;
+}
+
+.sfdt-btn-icon:hover {
+  opacity: 1;
+}
+
+/* ─── SOQL Panel ─────────────────────────────────────── */
+
+.sfdt-soql-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sfdt-soql-editor-area {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--sfdt-border);
+  flex-shrink: 0;
+}
+
+.sfdt-soql-editor-wrapper {
+  position: relative;
+}
+
+.sfdt-soql-editor {
+  width: 100%;
+  min-height: 80px;
+  max-height: 200px;
+  padding: 12px 16px;
+  background: var(--sfdt-bg);
+  border: none;
+  color: var(--sfdt-fg);
+  font-family: var(--sfdt-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  tab-size: 2;
+}
+
+.sfdt-soql-editor::placeholder {
+  color: var(--sfdt-fg3);
+}
+
+.sfdt-soql-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 16px;
+  background: var(--sfdt-bg2);
+  border-top: 1px solid var(--sfdt-border);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sfdt-soql-divider {
+  color: var(--sfdt-border);
+  margin: 0 4px;
+}
+
+.sfdt-soql-hints {
+  max-height: 120px;
+  overflow-y: auto;
+  background: var(--sfdt-bg2);
+}
+
+.sfdt-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--sfdt-border);
+}
+
+.sfdt-hint-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.sfdt-hint-msg {
+  color: var(--sfdt-fg);
+}
+
+.sfdt-hint-suggestion {
+  color: var(--sfdt-fg3);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.sfdt-hint-success {
+  color: var(--sfdt-green);
+}
+
+.sfdt-hint-warning .sfdt-hint-msg {
+  color: var(--sfdt-yellow);
+}
+
+.sfdt-hint-error .sfdt-hint-msg {
+  color: var(--sfdt-red);
+}
+
+.sfdt-query-plan {
+  padding: 8px 16px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--sfdt-fg2);
+  background: var(--sfdt-bg3);
+  border-top: 1px solid var(--sfdt-border);
+}
+
+/* ─── SOQL Results ───────────────────────────────────── */
+
+.sfdt-soql-results {
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sfdt-border) transparent;
+}
+
+.sfdt-soql-result-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  font-size: 11px;
+  color: var(--sfdt-fg2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sfdt-soql-table-wrapper {
+  overflow-x: auto;
+}
+
+.sfdt-soql-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sfdt-soql-table th {
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--sfdt-accent);
+  background: var(--sfdt-bg2);
+  border-bottom: 1px solid var(--sfdt-border);
+  white-space: nowrap;
+  position: sticky;
+  top: 32px;
+  z-index: 1;
+}
+
+.sfdt-soql-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--sfdt-border);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sfdt-soql-table tr:hover td {
+  background: var(--sfdt-bg-hover);
+}
+
+.sfdt-soql-loading,
+.sfdt-soql-empty,
+.sfdt-soql-placeholder {
+  padding: 24px;
+  text-align: center;
+  color: var(--sfdt-fg3);
+  font-size: 13px;
+}
+
+.sfdt-soql-error {
+  padding: 16px;
+}
+
+.sfdt-soql-error-title {
+  color: var(--sfdt-red);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.sfdt-soql-error-msg {
+  color: var(--sfdt-fg2);
+  font-family: var(--sfdt-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sfdt-json-val {
+  color: var(--sfdt-fg3);
+  font-family: var(--sfdt-mono);
+  font-size: 11px;
+}
+
+/* ─── SOQL History & Favorites ───────────────────────── */
+
+.sfdt-soql-history-area,
+.sfdt-soql-favorites-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.sfdt-soql-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--sfdt-fg2);
+  border-bottom: 1px solid var(--sfdt-border);
+}
+
+.sfdt-soql-history-item {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--sfdt-border);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sfdt-soql-history-item.sfdt-error {
+  border-left: 2px solid var(--sfdt-red);
+}
+
+.sfdt-soql-history-query {
+  flex: 1;
+  min-width: 0;
+}
+
+.sfdt-soql-history-query pre {
+  font-family: var(--sfdt-mono);
+  font-size: 11px;
+  color: var(--sfdt-fg);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: 4px;
+}
+
+.sfdt-soql-history-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--sfdt-fg3);
+  margin-top: 4px;
+}
+
+.sfdt-soql-history-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ─── Autocomplete Dropdown ──────────────────────────── */
+
+.sfdt-soql-autocomplete {
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  display: none;
+  background: var(--sfdt-bg2);
+  border: 1px solid var(--sfdt-border);
+  border-radius: var(--sfdt-radius-sm);
+  box-shadow: var(--sfdt-shadow-sm);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  min-width: 250px;
+}
+
+.sfdt-ac-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sfdt-ac-item:hover,
+.sfdt-ac-item.selected {
+  background: var(--sfdt-bg-selected);
+}
+
+.sfdt-ac-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.sfdt-ac-text {
+  flex: 1;
+  color: var(--sfdt-fg);
+}
+
+.sfdt-ac-type {
+  font-size: 10px;
+  color: var(--sfdt-fg3);
+  text-transform: uppercase;
+}
+
+/* ─── Floating Toolbar ───────────────────────────────── */
+
+.sfdt-toolbar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: var(--sfdt-z-toolbar);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.sfdt-toolbar-toggle {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #6366f1, #818cf8);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: none;
+}
+
+.sfdt-toolbar-toggle:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.5);
+}
+
+.sfdt-toolbar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sfdt-toolbar-logo svg {
+  width: 22px;
+  height: 22px;
+  color: #fff;
+}
+
+.sfdt-toolbar-buttons {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: #0f0f1a;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: sfdt-fade-in 0.15s ease-out;
+}
+
+.sfdt-toolbar.sfdt-toolbar-expanded .sfdt-toolbar-buttons {
+  display: flex;
+}
+
+@keyframes sfdt-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sfdt-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--sfdt-fg);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.sfdt-toolbar-btn:hover {
+  background: rgba(129, 140, 248, 0.1);
+  border-color: rgba(129, 140, 248, 0.2);
+}
+
+.sfdt-toolbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.sfdt-toolbar-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sfdt-toolbar-btn-secondary {
+  color: var(--sfdt-fg3);
+  font-size: 12px;
+}
+
+.sfdt-toolbar-label {
+  font-size: 12px;
+}
+
+/* ─── SOQL Tab Styling ───────────────────────────────── */
+
+.sfdt-soql-tab {
+  border: none !important;
+  background: transparent !important;
+  color: var(--sfdt-fg2) !important;
+  border-bottom: 2px solid transparent !important;
+  padding: 4px 10px !important;
+}
+
+.sfdt-soql-tab.active {
+  color: var(--sfdt-accent) !important;
+  border-bottom-color: var(--sfdt-accent) !important;
+}
+
+/* ─── Utility ────────────────────────────────────────── */
+
+.sfdt-hidden {
+  display: none !important;
+}
+
+/* ─── Responsive ─────────────────────────────────────── */
+
+@media (max-width: 800px) {
+  .sfdt-palette-dialog {
+    width: 95vw;
+    margin-top: 5vh;
+    max-height: 80vh;
+  }
+
+  .sfdt-panel-right {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .sfdt-panel-bottom {
+    height: 60vh;
+  }
+}

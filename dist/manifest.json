@@ -1,0 +1,120 @@
+{
+  "manifest_version": 3,
+  "name": "Advanced Salesforce Developer Toolkit",
+  "version": "1.0.0",
+  "description": "Developer productivity extension for Salesforce: search, inspect, navigate, query, and debug metadata from any Salesforce page.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "tabs",
+    "cookies",
+    "webRequest",
+    "clipboardWrite",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.lightning.force.com/*",
+    "https://*.my.salesforce.com/*",
+    "https://*.sandbox.my.salesforce.com/*",
+    "https://*.salesforce-setup.com/*",
+    "https://*.visual.force.com/*",
+    "https://*.visualforce.com/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.lightning.force.com/*",
+        "https://*.my.salesforce.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.visual.force.com/*",
+        "https://*.visualforce.com/*"
+      ],
+      "js": [
+        "utils/cacheManager.js",
+        "utils/salesforceApi.js",
+        "utils/icons.js",
+        "utils/shadowDomHelper.js",
+        "services/metadataService.js",
+        "services/searchService.js",
+        "services/queryService.js",
+        "components/searchPalette.js",
+        "components/inspectorPanel.js",
+        "components/navigatorPanel.js",
+        "components/soqlPanel.js",
+        "components/dataBuilderPanel.js",
+        "components/debugLogPanel.js",
+        "components/executeAnonymousPanel.js",
+        "content/salesforceContentScript.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "open-search-palette": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Open Global Salesforce Search"
+    },
+    "open-inspector": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Open Record Inspector"
+    },
+    "open-soql": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Q",
+        "mac": "Command+Shift+Q"
+      },
+      "description": "Open SOQL Query Tool"
+    },
+    "open-navigator": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+G",
+        "mac": "Command+Shift+G"
+      },
+      "description": "Open Smart Navigator"
+    },
+    "open-debuglog": {
+      "description": "Open Debug Log Viewer"
+    },
+    "open-execanon": {
+      "description": "Open Execute Anonymous"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["styles/*", "icons/*"],
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.lightning.force.com/*",
+        "https://*.my.salesforce.com/*"
+      ]
+    }
+  ]
+}
