@@ -30,6 +30,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return false;
 
+    case 'open-new-tab':
+      if (message.url) {
+        chrome.tabs.create({ url: message.url, active: true });
+      }
+      return false;
+
     case 'get-extension-info':
       sendResponse({
         version: chrome.runtime.getManifest().version,

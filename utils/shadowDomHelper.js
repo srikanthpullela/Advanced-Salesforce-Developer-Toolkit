@@ -55,6 +55,19 @@ const SFDTShadowHelper = (() => {
   line-height: normal !important;
 }
 
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  margin: 0;
+}
+
 /* SVG sizing for all contexts */
 svg {
   display: inline-block !important;
@@ -185,23 +198,36 @@ svg {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   scrollbar-width: none;
+  flex-shrink: 0;
 }
 .sfdt-filters::-webkit-scrollbar { display: none; }
 
 .sfdt-chip {
+  display: inline-flex !important;
+  align-items: center !important;
   padding: 4px 10px !important;
   font-size: 11px !important;
-  border-radius: 12px;
+  border-radius: 12px !important;
   border: 1px solid var(--border) !important;
   background: transparent !important;
   color: var(--fg2) !important;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.12s;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  outline: none !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  text-decoration: none !important;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  flex-shrink: 0 !important;
 }
 .sfdt-chip:hover {
   border-color: var(--accent) !important;
   color: var(--accent) !important;
+}
+.sfdt-chip:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 .sfdt-chip.active {
   background: var(--accent) !important;
@@ -295,6 +321,31 @@ svg {
   flex-shrink: 0;
 }
 
+.sfdt-result-newtab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg3);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+  padding: 0;
+  pointer-events: auto;
+}
+.sfdt-result-newtab svg { width: 14px; height: 14px; }
+.sfdt-result:hover .sfdt-result-newtab,
+.sfdt-result.selected .sfdt-result-newtab { opacity: 1; }
+.sfdt-result-newtab:hover {
+  background: var(--bg3);
+  color: var(--accent);
+}
+
 .sfdt-code-line {
   display: block;
   font-family: var(--mono) !important;
@@ -346,6 +397,12 @@ mark.sfdt-highlight {
   border-top: 1px solid var(--border);
   font-size: 11px !important;
   color: var(--fg3) !important;
+  gap: 8px;
+}
+.sfdt-status-hint {
+  font-size: 10px !important;
+  color: var(--fg3) !important;
+  opacity: 0.7;
 }
 
 /* ─── Navigator Tabs ─── */

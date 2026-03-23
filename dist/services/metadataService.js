@@ -365,6 +365,18 @@ const MetadataService = (() => {
     }
   }
 
+  async function fetchTabs() {
+    const cached = CACHE.get('metadata', 'tabs');
+    if (cached) return cached;
+    try {
+      const records = await API.restGet('/tabs/');
+      CACHE.set('metadata', 'tabs', records || []);
+      return records || [];
+    } catch {
+      return [];
+    }
+  }
+
   // ─── Full Index Builder ────────────────────────────────
 
   async function buildIndex() {
@@ -532,12 +544,13 @@ const MetadataService = (() => {
 
     // Batch 3 — remaining metadata
     try {
-      const [namedCreds, staticRes, emailTpls, connApps, remoteSites] = await Promise.all([
+      const [namedCreds, staticRes, emailTpls, connApps, remoteSites, tabs] = await Promise.all([
         fetchNamedCredentials().catch(() => []),
         fetchStaticResources().catch(() => []),
         fetchEmailTemplates().catch(() => []),
         fetchConnectedApps().catch(() => []),
-        fetchRemoteSiteSettings().catch(() => [])
+        fetchRemoteSiteSettings().catch(() => []),
+        fetchTabs().catch(() => [])
       ]);
 
       index.namedCredentials = namedCreds.map(n => ({
@@ -563,6 +576,17 @@ const MetadataService = (() => {
       index.remoteSiteSettings = remoteSites.map(r => ({
         id: r.Id, name: r.DeveloperName, type: 'RemoteSiteSetting', icon: '🌐',
         endpoint: r.EndpointUrl, active: r.IsActive
+      }));
+
+      index.tabs = tabs.map(t => ({
+        id: t.sobjectName || t.name,
+        name: t.label || t.name,
+        type: 'Tab',
+        icon: '📑',
+        label: t.label || t.name,
+        sobjectName: t.sobjectName,
+        custom: t.custom,
+        url: t.url
       }));
     } catch (e) {
       console.error('[SFDT] Index build error (batch 3):', e);
@@ -648,6 +672,13 @@ const MetadataService = (() => {
         return `${base}/lightning/setup/ConnectedApplication/page?address=%2F${item.id}`;
       case 'RemoteSiteSetting':
         return `${base}/lightning/setup/SecurityRemoteProxy/page?address=%2F${item.id}`;
+      case 'Tab':
+        if (item.url) {
+          if (item.url.startsWith('http')) return item.url;
+          return `${base}${item.url}`;
+        }
+        if (item.sobjectName) return `${base}/lightning/o/${item.sobjectName}/home`;
+        return `${base}/lightning/setup/Tabs/home`;
       default:
         return `${base}/lightning/setup/SetupOneHome/home`;
     }
@@ -696,6 +727,13 @@ const MetadataService = (() => {
       case 'LWC':
       case 'AuraComponent':
         return `${base}/${item.id}`;
+      case 'Tab':
+        if (item.url) {
+          if (item.url.startsWith('http')) return item.url;
+          return `${base}${item.url}`;
+        }
+        if (item.sobjectName) return `${base}/${item.sobjectName}/o`;
+        return `${base}/setup/customize/tab/home`;
       default:
         if (item.id) return `${base}/${item.id}`;
         return `${base}/setup/forcecomHomepage.apexp`;
@@ -724,6 +762,7 @@ const MetadataService = (() => {
     fetchDashboards,
     fetchConnectedApps,
     fetchRemoteSiteSettings,
+    fetchTabs,
     buildIndex,
     getIndex,
     isReady,

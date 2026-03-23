@@ -40,7 +40,9 @@ const SearchPalette = (() => {
     { key: 'CustomObject', label: 'Objects' },
     { key: 'Field', label: 'Fields' },
     { key: 'VisualforcePage', label: 'VF Pages' },
-    { key: 'Report', label: 'Reports' }
+    { key: 'Report', label: 'Reports' },
+    { key: 'Tab', label: 'Tabs' },
+    { key: 'CustomSetting', label: 'Settings' }
   ];
 
   function _create() {
@@ -62,6 +64,7 @@ const SearchPalette = (() => {
           <div class="sfdt-results"></div>
           <div class="sfdt-status-bar">
             <span class="sfdt-status-text">Type to search records, metadata, and code</span>
+            <span class="sfdt-status-hint">Enter to open · Shift+Enter for new tab</span>
             <span class="sfdt-status-meta"></span>
             <button class="sfdt-btn sfdt-btn-sm" id="sfdt-rebuild-index" style="margin-left:auto">${ICONS().refresh} Rebuild Index</button>
           </div>
@@ -422,14 +425,25 @@ const SearchPalette = (() => {
           ${matchInfo}${symbolInfo}${recordInfo}${fieldInfo}
         </div>
         ${typeBadge}
+        <button class="sfdt-result-newtab" data-index="${i}" title="Open in new tab (Shift+Enter)">${ICONS().externalLink}</button>
       </div>`;
     }).join('');
 
     _resultsList.querySelectorAll('.sfdt-result').forEach(el => {
-      el.addEventListener('click', () => _selectResult(parseInt(el.dataset.index, 10)));
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.sfdt-result-newtab')) return;
+        _selectResult(parseInt(el.dataset.index, 10));
+      });
       el.addEventListener('mouseenter', () => {
         _selectedIndex = parseInt(el.dataset.index, 10);
         _updateSelection();
+      });
+    });
+
+    _resultsList.querySelectorAll('.sfdt-result-newtab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _selectResult(parseInt(btn.dataset.index, 10), true);
       });
     });
   }
@@ -443,7 +457,8 @@ const SearchPalette = (() => {
       'PermissionSet': I.lock, 'Report': I.chart, 'Dashboard': I.chart,
       'CustomLabel': I.tag, 'StaticResource': I.box, 'EmailTemplate': I.mail,
       'NamedCredential': I.lock, 'ConnectedApp': I.link, 'RemoteSiteSetting': I.globe,
-      'CustomMetadata': I.file, 'CustomSetting': I.settings
+      'CustomMetadata': I.file, 'CustomSetting': I.settings,
+      'Tab': I.layout
     };
     return map[type] || I.file;
   }
@@ -489,7 +504,7 @@ const SearchPalette = (() => {
         break;
       case 'Enter':
         e.preventDefault();
-        _selectResult(_selectedIndex);
+        _selectResult(_selectedIndex, e.shiftKey);
         break;
       case 'Escape':
         e.preventDefault();
@@ -511,7 +526,15 @@ const SearchPalette = (() => {
     if (selected) selected.scrollIntoView({ block: 'nearest' });
   }
 
-  function _selectResult(index) {
+  function _openUrl(url, newTab) {
+    if (newTab) {
+      chrome.runtime.sendMessage({ action: 'open-new-tab', url: url });
+    } else {
+      window.location.href = url;
+    }
+  }
+
+  function _selectResult(index, newTab) {
     const result = _currentResults[index];
     if (!result) return;
 
@@ -524,7 +547,7 @@ const SearchPalette = (() => {
     if (result.matchType === 'record' && result.id) {
       const base = window.SalesforceAPI.getInstanceUrl();
       const url = `${base}/lightning/r/${result.sobjectType}/${result.id}/view`;
-      window.location.href = url;
+      _openUrl(url, newTab);
       hide();
       return;
     }
@@ -544,13 +567,15 @@ const SearchPalette = (() => {
         // Classic: Go to the object field list page
         url = `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(result.entityName)}&setupid=CustomObjects`;
       }
-      window.location.href = url;
+      _openUrl(url, newTab);
       hide();
       return;
     }
 
     const url = META().getSetupUrl(result);
-    if (url) window.location.href = url;
+    if (url) {
+      _openUrl(url, newTab);
+    }
     hide();
   }
 

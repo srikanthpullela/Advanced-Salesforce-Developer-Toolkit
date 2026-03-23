@@ -47,7 +47,8 @@ const NavigatorPanel = (() => {
     { name: 'Scheduled Jobs', icon: 'clock', path: '/lightning/setup/ScheduledJobs/home' },
     { name: 'Platform Events', icon: 'bolt', path: '/lightning/setup/EventObjects/home' },
     { name: 'Auth Providers', icon: 'lock', path: '/lightning/setup/AuthProvidersPage/home' },
-    { name: 'Data Loader', icon: 'database', path: '/lightning/setup/DataManagementDataLoader/home' }
+    { name: 'Data Loader', icon: 'database', path: '/lightning/setup/DataManagementDataLoader/home' },
+    { name: 'Tabs', icon: 'layout', path: '/lightning/setup/Tabs/home' }
   ];
 
   function _create() {
