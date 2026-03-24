@@ -22,7 +22,10 @@ const SearchPalette = (() => {
   let _recordSearchAbortId = 0;
   let _fieldSearchTimer = null;
   let _fieldSearchAbortId = 0;
+  let _dynamicSearchAbortId = 0;
+  let _dynamicSearchRunning = false;
   let _activeFilter = null;
+  let _pendingSearches = new Set();
   let _searchHistory = [];
 
   const HISTORY_KEY = 'sfdt_search_history';
@@ -42,7 +45,8 @@ const SearchPalette = (() => {
     { key: 'VisualforcePage', label: 'VF Pages' },
     { key: 'Report', label: 'Reports' },
     { key: 'Tab', label: 'Tabs' },
-    { key: 'CustomSetting', label: 'Settings' }
+    { key: 'CustomSetting', label: 'Settings' },
+    { key: 'Attribute', label: 'Attributes' }
   ];
 
   function _create() {
@@ -153,6 +157,8 @@ const SearchPalette = (() => {
     clearTimeout(_codeSearchTimer);
     clearTimeout(_recordSearchTimer);
     clearTimeout(_fieldSearchTimer);
+    _dynamicSearchAbortId++; // Cancel any running dynamic search
+    _dynamicSearchRunning = false;
     _debounceTimer = setTimeout(() => _performSearch(_input.value), 50);
   }
 
@@ -197,6 +203,8 @@ const SearchPalette = (() => {
     if (_activeFilter === 'Record') {
       _currentResults = [];
       _selectedIndex = 0;
+      _pendingSearches.clear();
+      _pendingSearches.add('record');
       _renderResults([]);
       _statusBar.textContent = 'Searching records...';
 
@@ -211,6 +219,8 @@ const SearchPalette = (() => {
     if (_activeFilter === 'Field') {
       _currentResults = [];
       _selectedIndex = 0;
+      _pendingSearches.clear();
+      _pendingSearches.add('field');
       _renderResults([]);
       _statusBar.textContent = 'Searching fields...';
 
@@ -227,6 +237,14 @@ const SearchPalette = (() => {
 
     _currentResults = results;
     _selectedIndex = 0;
+
+    // Determine which async searches will run, so we can show a searching indicator
+    _pendingSearches.clear();
+    const trimmed = query.trim();
+    if (trimmed.length >= 4) _pendingSearches.add('code');
+    if (trimmed.length >= 2 && (!_activeFilter || _activeFilter === 'Record')) _pendingSearches.add('record');
+    if (trimmed.length >= 3 && (!_activeFilter || _activeFilter === 'Field')) _pendingSearches.add('field');
+
     _renderResults(results);
 
     const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
@@ -279,10 +297,13 @@ const SearchPalette = (() => {
       if (abortId !== _codeSearchAbortId || !_visible) return;
       if (!_input || _input.value.trim() !== query) return;
 
+      _pendingSearches.delete('code');
+
       if (codeResults.length === 0) {
-        // No code results — update status only
+        // No code results — update status and check if all async searches are done
         const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
         _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote}`;
+        if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
         return;
       }
 
@@ -305,6 +326,8 @@ const SearchPalette = (() => {
       _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${codeNote}${filterNote}`;
     } catch (e) {
       console.warn('[SFDT] Code search error:', e.message);
+      _pendingSearches.delete('code');
+      if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
   }
 
@@ -316,32 +339,94 @@ const SearchPalette = (() => {
       if (abortId !== _recordSearchAbortId || !_visible) return;
       if (!_input || _input.value.trim() !== query) return;
 
+      _pendingSearches.delete('record');
+
       if (recordResults.length === 0) {
         const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
         if (!_statusBar.textContent.includes('code')) {
           _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote}`;
         }
-        return;
+        if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
+      } else {
+        // Merge record results (deduplicate by id)
+        const existingIds = new Set(_currentResults.map(r => r.id));
+        const newRecordResults = recordResults.filter(r => !existingIds.has(r.id));
+
+        if (newRecordResults.length > 0) {
+          _currentResults = [..._currentResults, ...newRecordResults];
+          _currentResults.sort((a, b) => b.score - a.score);
+          _renderResults(_currentResults);
+        }
+
+        const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+        const recordNote = newRecordResults.length > 0 ? ` + ${newRecordResults.length} records` : '';
+        const total = _currentResults.length;
+        _statusBar.textContent = `${total} result${total !== 1 ? 's' : ''}${recordNote}${filterNote}`;
       }
 
-      // Merge record results (deduplicate by id)
-      const existingIds = new Set(_currentResults.map(r => r.id));
-      const newRecordResults = recordResults.filter(r => !existingIds.has(r.id));
-
-      if (newRecordResults.length > 0) {
-        _currentResults = [..._currentResults, ...newRecordResults];
-        // Sort: metadata first (higher score), then records
-        _currentResults.sort((a, b) => b.score - a.score);
-        _renderResults(_currentResults);
+      // Fire background dynamic SOQL search for remaining queryable objects
+      if (query.length >= 3 && SEARCH().searchRecordsDynamic) {
+        _performDynamicSearch(query);
       }
-
-      const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
-      const recordNote = newRecordResults.length > 0 ? ` + ${newRecordResults.length} records` : '';
-      const total = _currentResults.length;
-      _statusBar.textContent = `${total} result${total !== 1 ? 's' : ''}${recordNote}${filterNote}`;
     } catch (e) {
       console.warn('[SFDT] Record search error:', e.message);
+      _pendingSearches.delete('record');
+      if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
+  }
+
+  function _performDynamicSearch(query) {
+    _dynamicSearchAbortId++;
+    const myAbortId = _dynamicSearchAbortId;
+    _dynamicSearchRunning = true;
+    _appendBottomLoader();
+
+    SEARCH().searchRecordsDynamic(
+      query,
+      // onBatchResults callback — append new results as they arrive
+      (newResults) => {
+        if (myAbortId !== _dynamicSearchAbortId || !_visible) return;
+        if (!_input || _input.value.trim() !== query) return;
+
+        const existingIds = new Set(_currentResults.map(r => r.id));
+        const fresh = newResults.filter(r => !existingIds.has(r.id));
+        if (fresh.length > 0) {
+          _currentResults = [..._currentResults, ...fresh];
+          _currentResults.sort((a, b) => b.score - a.score);
+          _renderResults(_currentResults);
+          if (_dynamicSearchRunning) _appendBottomLoader();
+
+          const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+          _statusBar.textContent = `${_currentResults.length} results${filterNote}`;
+        }
+      },
+      // shouldAbort callback
+      () => myAbortId !== _dynamicSearchAbortId || !_visible
+    ).then(() => {
+      if (myAbortId !== _dynamicSearchAbortId) return;
+      _dynamicSearchRunning = false;
+      _removeBottomLoader();
+      const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+      _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote}`;
+    }).catch(() => {
+      _dynamicSearchRunning = false;
+      _removeBottomLoader();
+    });
+  }
+
+  function _appendBottomLoader() {
+    _removeBottomLoader();
+    if (!_resultsList) return;
+    const loader = document.createElement('div');
+    loader.className = 'sfdt-dynamic-loader';
+    loader.innerHTML = '<span class="sfdt-spinner"></span> Searching more objects...';
+    _resultsList.appendChild(loader);
+  }
+
+  function _removeBottomLoader() {
+    if (!_resultsList) return;
+    const existing = _resultsList.querySelector('.sfdt-dynamic-loader');
+    if (existing) existing.remove();
   }
 
   async function _performFieldSearch(query, abortId) {
@@ -354,10 +439,13 @@ const SearchPalette = (() => {
 
       const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
 
+      _pendingSearches.delete('field');
+
       if (fieldResults.length === 0) {
         if (_activeFilter === 'Field') {
           _statusBar.textContent = `No fields found${filterNote}`;
         }
+        if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
         return;
       }
 
@@ -376,14 +464,20 @@ const SearchPalette = (() => {
       _statusBar.textContent = `${total} result${total !== 1 ? 's' : ''}${fieldNote}${filterNote}`;
     } catch (e) {
       console.warn('[SFDT] Field search error:', e.message);
+      _pendingSearches.delete('field');
+      if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
   }
 
   function _renderResults(results) {
     if (results.length === 0) {
-      _resultsList.innerHTML = _input.value
-        ? '<div class="sfdt-empty">No results found</div>'
-        : '';
+      if (_pendingSearches.size > 0) {
+        _resultsList.innerHTML = '<div class="sfdt-searching"><span class="sfdt-spinner"></span> Searching...</div>';
+      } else {
+        _resultsList.innerHTML = _input.value
+          ? '<div class="sfdt-empty">No results found</div>'
+          : '';
+      }
       return;
     }
 
@@ -415,14 +509,20 @@ const SearchPalette = (() => {
         ? `<span class="sfdt-result-ns">${_escapeHTML(r.namespace)}</span>`
         : '';
 
+      // Determine display name: prefer readable label, show API name as subtitle
+      const hasReadableLabel = r.label && r.label !== r.name && !r.namespace;
+      const displayName = hasReadableLabel ? r.label : r.name;
+      const apiNameSub = hasReadableLabel
+        ? `<div class="sfdt-result-sub">${_escapeHTML(r.name)}</div>` : '';
+
       const icon = r.matchType === 'field' ? ICONS().settings
         : r.matchType === 'record' ? _getRecordIcon(r.sobjectType) : _getTypeIcon(r.type);
 
       return `<div class="sfdt-result ${i === _selectedIndex ? 'selected' : ''}" data-index="${i}">
         <span class="sfdt-result-icon">${icon}</span>
         <div class="sfdt-result-content">
-          <div class="sfdt-result-name">${_highlightMatch(_escapeHTML(r.name), _input.value)}${nsInfo}</div>
-          ${matchInfo}${symbolInfo}${recordInfo}${fieldInfo}
+          <div class="sfdt-result-name">${_highlightMatch(_escapeHTML(displayName), _input.value)}${nsInfo}</div>
+          ${matchInfo}${symbolInfo}${recordInfo}${fieldInfo}${apiNameSub}
         </div>
         ${typeBadge}
         <button class="sfdt-result-newtab" data-index="${i}" title="Open in new tab (Shift+Enter)">${ICONS().externalLink}</button>
@@ -458,7 +558,8 @@ const SearchPalette = (() => {
       'CustomLabel': I.tag, 'StaticResource': I.box, 'EmailTemplate': I.mail,
       'NamedCredential': I.lock, 'ConnectedApp': I.link, 'RemoteSiteSetting': I.globe,
       'CustomMetadata': I.file, 'CustomSetting': I.settings,
-      'Tab': I.layout
+      'Tab': I.layout,
+      'Attribute': I.tag
     };
     return map[type] || I.file;
   }

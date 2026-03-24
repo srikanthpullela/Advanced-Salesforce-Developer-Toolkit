@@ -234,14 +234,31 @@ const SearchService = (() => {
     // Escape SOSL reserved characters
     const safeQuery = query.replace(/([?&|!{}\[\]()^~*:\\"'+\-])/g, '\\$1');
 
-    // Gather custom objects from the metadata index to include in search
+    // Gather objects from the metadata index
     const idx = META().getIndex ? META().getIndex() : {};
-    const customObjs = (idx.customObjects || [])
-      .filter(o => o.name && o.name.endsWith('__c') && o.searchable !== false)
-      .slice(0, 8)
+    const allObjects = idx.objects || [];
+    const standardNames = new Set([
+      'Account', 'Contact', 'Opportunity', 'Lead', 'Case', 'Product2', 'Campaign'
+    ]);
+
+    // SOSL-searchable custom objects
+    const soslSearchableObjs = allObjects
+      .filter(o => o.name && o.name.endsWith('__c') && o.searchable === true && !standardNames.has(o.name))
+      .slice(0, 25)
       .map(o => `${o.name}(Id, Name)`);
 
-    // Build SOSL with safe standard objects + custom objects
+    // Key non-SOSL objects to search via SOQL fallback (kept small for speed)
+    const builtInFallback = [
+      'Apttus_Proposal__Proposal__c',
+      'Apttus_Config2__ProductConfiguration__c',
+      'Apttus_Config2__ProductAttributeValue__c'
+    ];
+
+    // Merge user-defined custom search objects from extension settings
+    const userObjs = await _getUserCustomSearchObjects();
+    const soqlFallbackObjs = [...new Set([...builtInFallback, ...userObjs])];
+
+    // Standard SOSL-safe objects
     const standardObjs = [
       'Account(Id, Name)',
       'Contact(Id, Name, Email)',
@@ -252,19 +269,179 @@ const SearchService = (() => {
       'Campaign(Id, Name)'
     ];
 
-    // Check total URL length — if too many custom objects, skip them
-    const allObjs = [...standardObjs, ...customObjs];
-    const returning = allObjs.join(', ');
-    const testSosl = `FIND {${safeQuery}} IN NAME FIELDS RETURNING ${returning}`;
-
-    // If SOSL would create URL > 1500 chars, use standard objects only
-    const sosl = encodeURIComponent(testSosl).length > 1500
-      ? `FIND {${safeQuery}} IN NAME FIELDS RETURNING ${standardObjs.join(', ')}`
+    // Build SOSL
+    const allSoslObjs = [...standardObjs, ...soslSearchableObjs];
+    const returning = allSoslObjs.join(', ');
+    const testSosl = `FIND {${safeQuery}} IN ALL FIELDS RETURNING ${returning}`;
+    const sosl = encodeURIComponent(testSosl).length > 2500
+      ? `FIND {${safeQuery}} IN ALL FIELDS RETURNING ${standardObjs.join(', ')}`
       : testSosl;
 
-    // Try with full object list, fall back to smaller sets on error
-    const result = await _executeSoslSearch(API, sosl, safeQuery, standardObjs, maxResults);
-    return result;
+    // Run SOSL + supplementary SOQL in parallel
+    const [soslResults, soqlResults] = await Promise.all([
+      _executeSoslSearch(API, sosl, safeQuery, standardObjs, maxResults),
+      _executeSupplementarySoqlSearch(API, query.trim(), soqlFallbackObjs, maxResults)
+    ]);
+
+    // Merge and deduplicate by record Id
+    const seenIds = new Set();
+    const merged = [];
+    for (const r of [...soslResults, ...soqlResults]) {
+      if (!seenIds.has(r.id)) {
+        seenIds.add(r.id);
+        merged.push(r);
+      }
+    }
+    return merged.slice(0, maxResults);
+  }
+
+  /**
+   * Supplementary SOQL search for objects that don't support SOSL.
+   * Supplementary SOQL search for key objects that don't support SOSL.
+   * Special handling for known objects with non-standard name fields.
+   */
+  async function _executeSupplementarySoqlSearch(API, query, soqlFallbackObjs, maxResults) {
+    if (!soqlFallbackObjs || soqlFallbackObjs.length === 0) return [];
+
+    // Escape single quotes for SOQL
+    const safeQuery = query.replace(/'/g, "\\'");
+    const likePattern = `%${safeQuery}%`;
+
+    // Known objects with non-standard name fields
+    const specialNameFields = {
+      'Apttus_Proposal__Proposal__c': {
+        fields: 'Id, Name, Apttus_Proposal__Proposal_Name__c',
+        nameField: 'Apttus_Proposal__Proposal_Name__c',
+        displayField: 'Apttus_Proposal__Proposal_Name__c'
+      }
+    };
+
+    const promises = soqlFallbackObjs.map(async (objName) => {
+      try {
+        const special = specialNameFields[objName];
+        const fields = special ? special.fields : 'Id, Name';
+        const nameField = special ? special.nameField : 'Name';
+        const displayField = special ? special.displayField : 'Name';
+
+        const soql = `SELECT ${fields} FROM ${objName} WHERE ${nameField} LIKE '${likePattern}' LIMIT 10`;
+        const response = await API.restQuery(soql);
+        const records = response.records || [];
+        return records.map(r => {
+          const displayName = r[displayField] || r.Name || r.Id;
+          const autoNumber = r.Name && r.Name !== displayName ? r.Name : null;
+          const friendlyType = objName.replace(/__c$/, '').replace(/.*__/, '').replace(/_/g, ' ');
+          return {
+            id: r.Id,
+            name: displayName,
+            type: 'Record',
+            sobjectType: objName,
+            score: 200,
+            matchType: 'record',
+            category: 'records',
+            recordDetail: (autoNumber ? `${autoNumber} · ` : '') + friendlyType
+          };
+        });
+      } catch (e) {
+        // Object may not exist in this org — silently skip
+        return [];
+      }
+    });
+
+    const allResults = await Promise.all(promises);
+    const results = [];
+    for (const batch of allResults) {
+      results.push(...batch);
+    }
+    return results.slice(0, maxResults);
+  }
+
+  /**
+   * Deep background SOQL search across all queryable non-SOSL custom objects.
+   * Runs in batches to avoid overwhelming the API. Returns results incrementally via callback.
+   * @param {string} query - The search term
+   * @param {Function} onBatchResults - Called with array of new results as each batch completes
+   * @param {Function} shouldAbort - Called before each batch; return true to cancel
+   * @returns {Promise<void>}
+   */
+  async function searchRecordsDynamic(query, onBatchResults, shouldAbort) {
+    if (!query || query.length < 2) return;
+
+    const API = window.SalesforceAPI;
+    if (!API || !API.isConnected()) return;
+
+    const idx = META().getIndex ? META().getIndex() : {};
+    const allObjects = idx.objects || [];
+
+    // Objects already covered by fast search (SOSL + hardcoded SOQL + user custom)
+    const userObjs = await _getUserCustomSearchObjects();
+    const alreadyCovered = new Set([
+      'Account', 'Contact', 'Opportunity', 'Lead', 'Case', 'Product2', 'Campaign',
+      'Apttus_Proposal__Proposal__c', 'Apttus_Config2__ProductConfiguration__c',
+      'Apttus_Config2__ProductAttributeValue__c',
+      ...userObjs,
+      ...allObjects.filter(o => o.searchable === true).map(o => o.name)
+    ]);
+
+    // Queryable custom objects not yet covered
+    const dynamicObjs = allObjects
+      .filter(o => o.name && o.queryable === true && !alreadyCovered.has(o.name) && o.name.endsWith('__c'))
+      .map(o => o.name);
+
+    if (dynamicObjs.length === 0) return;
+
+    const safeQuery = query.replace(/'/g, "\\'");
+    const likePattern = `%${safeQuery}%`;
+
+    // Known objects with non-standard name fields
+    const specialNameFields = {
+      'Apttus_Proposal__Proposal__c': {
+        fields: 'Id, Name, Apttus_Proposal__Proposal_Name__c',
+        nameField: 'Apttus_Proposal__Proposal_Name__c',
+        displayField: 'Apttus_Proposal__Proposal_Name__c'
+      }
+    };
+
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < dynamicObjs.length; i += BATCH_SIZE) {
+      if (shouldAbort && shouldAbort()) return;
+
+      const batch = dynamicObjs.slice(i, i + BATCH_SIZE);
+      const promises = batch.map(async (objName) => {
+        try {
+          const special = specialNameFields[objName];
+          const fields = special ? special.fields : 'Id, Name';
+          const nameField = special ? special.nameField : 'Name';
+          const displayField = special ? special.displayField : 'Name';
+
+          const soql = `SELECT ${fields} FROM ${objName} WHERE ${nameField} LIKE '${likePattern}' LIMIT 5`;
+          const response = await API.restQuery(soql);
+          const records = response.records || [];
+          return records.map(r => {
+            const displayName = r[displayField] || r.Name || r.Id;
+            const autoNumber = r.Name && r.Name !== displayName ? r.Name : null;
+            const friendlyType = objName.replace(/__c$/, '').replace(/.*__/, '').replace(/_/g, ' ');
+            return {
+              id: r.Id,
+              name: displayName,
+              type: 'Record',
+              sobjectType: objName,
+              score: 150, // Lower score so instant results stay on top
+              matchType: 'record',
+              category: 'records',
+              recordDetail: (autoNumber ? `${autoNumber} · ` : '') + friendlyType
+            };
+          });
+        } catch (e) {
+          return [];
+        }
+      });
+
+      const batchResults = await Promise.all(promises);
+      const newResults = batchResults.flat().filter(r => r.id);
+      if (newResults.length > 0 && onBatchResults) {
+        onBatchResults(newResults);
+      }
+    }
   }
 
   async function _executeSoslSearch(API, sosl, safeQuery, standardObjs, maxResults) {
@@ -334,6 +511,28 @@ const SearchService = (() => {
     return results.slice(0, maxResults);
   }
 
+  // Cache for user custom search objects (refreshed every search to pick up changes quickly)
+  let _userCustomObjsCache = null;
+  let _userCustomObjsCacheTime = 0;
+
+  async function _getUserCustomSearchObjects() {
+    // Cache for 30 seconds to avoid reading storage on every keystroke
+    if (_userCustomObjsCache && (Date.now() - _userCustomObjsCacheTime < 30000)) {
+      return _userCustomObjsCache;
+    }
+    try {
+      const data = await chrome.storage.sync.get('sfdt_custom_search_objects');
+      const raw = data.sfdt_custom_search_objects || '';
+      _userCustomObjsCache = raw.split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && /^[a-zA-Z0-9_]+__[a-zA-Z0-9_]+$/.test(s));
+      _userCustomObjsCacheTime = Date.now();
+      return _userCustomObjsCache;
+    } catch (e) {
+      return [];
+    }
+  }
+
   function _extractRecordDetail(record, sobjectType) {
     const parts = [sobjectType];
     const fields = ['Email', 'Company', 'ProductCode', 'Phone', 'Industry',
@@ -370,7 +569,7 @@ const SearchService = (() => {
     // Build list of objects to search: standard + custom from metadata index
     const standardObjs = ['Account', 'Contact', 'Lead', 'Opportunity', 'Case', 'Product2', 'Campaign', 'Order', 'Contract', 'User', 'Task', 'Event'];
     const idx = META().getIndex ? META().getIndex() : {};
-    const customObjNames = (idx.customObjects || [])
+    const customObjNames = (idx.objects || [])
       .map(o => o.name)
       .filter(n => n && (n.endsWith('__c') || n.endsWith('__mdt')));
     const customSettingNames = (idx.customSettings || [])
@@ -381,7 +580,7 @@ const SearchService = (() => {
 
     // Build label lookup for objects from metadata index
     const objLabelMap = {};
-    for (const o of (idx.customObjects || [])) {
+    for (const o of (idx.objects || [])) {
       if (o.name) objLabelMap[o.name] = o.label || o.name;
     }
     for (const o of (idx.customSettings || [])) {
@@ -559,6 +758,7 @@ const SearchService = (() => {
     searchAll,
     searchCode,
     searchRecords,
+    searchRecordsDynamic,
     searchFields,
     searchByType,
     searchSymbols,

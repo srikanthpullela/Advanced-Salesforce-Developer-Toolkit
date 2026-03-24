@@ -150,6 +150,7 @@ const MetadataService = (() => {
         custom: o.custom,
         keyPrefix: o.keyPrefix,
         queryable: o.queryable,
+        searchable: o.searchable,
         createable: o.createable,
         updateable: o.updateable
       }));
@@ -377,6 +378,21 @@ const MetadataService = (() => {
     }
   }
 
+  async function fetchProductAttributes() {
+    const cached = CACHE.get('metadata', 'productAttributes');
+    if (cached) return cached;
+    try {
+      const res = await API.restQuery(
+        "SELECT Id, Name, Apttus_Config2__ProductId__r.Name, Apttus_Config2__Field__c FROM Apttus_Config2__ProductAttribute__c ORDER BY Name LIMIT 2000"
+      );
+      const records = res.records || [];
+      CACHE.set('metadata', 'productAttributes', records);
+      return records;
+    } catch {
+      return [];
+    }
+  }
+
   // ─── Full Index Builder ────────────────────────────────
 
   async function buildIndex() {
@@ -489,7 +505,9 @@ const MetadataService = (() => {
         type: 'CustomObject',
         icon: '🗂',
         custom: o.custom,
-        keyPrefix: o.keyPrefix
+        keyPrefix: o.keyPrefix,
+        searchable: o.searchable,
+        queryable: o.queryable
       }));
     } catch (e) {
       console.error('[SFDT] Index build error (batch 1):', e);
@@ -544,13 +562,14 @@ const MetadataService = (() => {
 
     // Batch 3 — remaining metadata
     try {
-      const [namedCreds, staticRes, emailTpls, connApps, remoteSites, tabs] = await Promise.all([
+      const [namedCreds, staticRes, emailTpls, connApps, remoteSites, tabs, productAttrs] = await Promise.all([
         fetchNamedCredentials().catch(() => []),
         fetchStaticResources().catch(() => []),
         fetchEmailTemplates().catch(() => []),
         fetchConnectedApps().catch(() => []),
         fetchRemoteSiteSettings().catch(() => []),
-        fetchTabs().catch(() => [])
+        fetchTabs().catch(() => []),
+        fetchProductAttributes().catch(() => [])
       ]);
 
       index.namedCredentials = namedCreds.map(n => ({
@@ -587,6 +606,15 @@ const MetadataService = (() => {
         sobjectName: t.sobjectName,
         custom: t.custom,
         url: t.url
+      }));
+
+      index.productAttributes = productAttrs.map(a => ({
+        id: a.Id,
+        name: a.Name,
+        type: 'Attribute',
+        icon: '🏷',
+        productName: a.Apttus_Config2__ProductId__r ? a.Apttus_Config2__ProductId__r.Name : '',
+        field: a.Apttus_Config2__Field__c || ''
       }));
     } catch (e) {
       console.error('[SFDT] Index build error (batch 3):', e);
@@ -679,6 +707,8 @@ const MetadataService = (() => {
         }
         if (item.sobjectName) return `${base}/lightning/o/${item.sobjectName}/home`;
         return `${base}/lightning/setup/Tabs/home`;
+      case 'Attribute':
+        return `${base}/lightning/r/Apttus_Config2__ProductAttribute__c/${item.id}/view`;
       default:
         return `${base}/lightning/setup/SetupOneHome/home`;
     }
@@ -734,6 +764,8 @@ const MetadataService = (() => {
         }
         if (item.sobjectName) return `${base}/${item.sobjectName}/o`;
         return `${base}/setup/customize/tab/home`;
+      case 'Attribute':
+        return `${base}/${item.id}`;
       default:
         if (item.id) return `${base}/${item.id}`;
         return `${base}/setup/forcecomHomepage.apexp`;
@@ -763,6 +795,7 @@ const MetadataService = (() => {
     fetchConnectedApps,
     fetchRemoteSiteSettings,
     fetchTabs,
+    fetchProductAttributes,
     buildIndex,
     getIndex,
     isReady,

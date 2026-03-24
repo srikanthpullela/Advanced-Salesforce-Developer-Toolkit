@@ -223,6 +223,78 @@
       transform: translateX(2px);
     }
 
+    .setting-group {
+      margin-top: 6px;
+    }
+
+    .setting-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--fg2);
+      margin-bottom: 6px;
+      padding-left: 4px;
+    }
+
+    .setting-label small {
+      font-weight: 400;
+      color: var(--fg3);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .setting-textarea {
+      width: 100%;
+      min-height: 68px;
+      padding: 10px 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      color: var(--fg);
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .setting-textarea::placeholder {
+      color: var(--fg3);
+    }
+
+    .setting-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .setting-save {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 8px;
+      padding: 5px 14px;
+      background: var(--accent2);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .setting-save:hover {
+      background: var(--accent);
+    }
+
+    .setting-saved {
+      font-size: 11px;
+      color: var(--green);
+      margin-left: 8px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
     .popup-info {
       padding: 12px 20px 16px;
       border-top: 1px solid var(--border);
@@ -329,7 +401,7 @@
           </span>
           <div class="btn-content">
             <div class="btn-label">Record Inspector</div>
-            <div class="btn-shortcut">Ctrl+Shift+I</div>
+            <div class="btn-shortcut">Ctrl+Shift+X</div>
           </div>
           <span class="btn-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
         </button>
@@ -349,7 +421,7 @@
           </span>
           <div class="btn-content">
             <div class="btn-label">Smart Navigator</div>
-            <div class="btn-shortcut">Ctrl+Shift+N</div>
+            <div class="btn-shortcut">Ctrl+Shift+G</div>
           </div>
           <span class="btn-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
         </button>
@@ -375,6 +447,16 @@
             <div class="btn-label">Clear All Cache</div>
           </div>
         </button>
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">
+          Custom Search Objects
+          <small>Add custom object API names to include in record search (one per line)</small>
+        </label>
+        <textarea class="setting-textarea" id="custom-objects-input" placeholder="Apttus_Config2__LineItem__c&#10;CustomObj__c&#10;MyNamespace__MyObject__c" spellcheck="false"></textarea>
+        <button class="setting-save" id="btn-save-objects">Save</button>
+        <span class="setting-saved" id="save-status">Saved!</span>
       </div>
     </div>
 

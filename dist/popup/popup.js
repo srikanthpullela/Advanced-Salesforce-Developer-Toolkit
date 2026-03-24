@@ -122,6 +122,25 @@
   const manifest = chrome.runtime.getManifest();
   document.getElementById('popup-version').textContent = `v${manifest.version}`;
 
+  // Custom Search Objects — load saved list
+  const customObjInput = document.getElementById('custom-objects-input');
+  const saveBtn = document.getElementById('btn-save-objects');
+  const saveStatus = document.getElementById('save-status');
+
+  chrome.storage.sync.get('sfdt_custom_search_objects', (data) => {
+    if (data.sfdt_custom_search_objects) {
+      customObjInput.value = data.sfdt_custom_search_objects;
+    }
+  });
+
+  saveBtn.addEventListener('click', () => {
+    const value = customObjInput.value.trim();
+    chrome.storage.sync.set({ sfdt_custom_search_objects: value }, () => {
+      saveStatus.style.opacity = '1';
+      setTimeout(() => { saveStatus.style.opacity = '0'; }, 2000);
+    });
+  });
+
   // Initialize
   checkTab();
 })();
