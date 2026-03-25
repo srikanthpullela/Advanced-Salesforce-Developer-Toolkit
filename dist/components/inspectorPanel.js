@@ -85,6 +85,8 @@ const InspectorPanel = (() => {
     if (lightningMatch) return { objectName: lightningMatch[1], recordId: lightningMatch[2] };
     // Classic: /001xxx  or  /001xxx?nooverride=1  or  /001xxx#section
     const classicMatch = url.match(/\/([a-zA-Z0-9]{15,18})(?:\?|$|\/|#)/);
+    if (classicMatch) return { objectName: null, recordId: classicMatch[1] };
+    return null;
   }
 
   async function _loadRecord(objectName, recordId) {
@@ -127,7 +129,8 @@ const InspectorPanel = (() => {
       _renderFields();
       _updateFooter();
     } catch (err) {
-      body.innerHTML = `<div class="sfdt-error">Error: ${_esc(err.message)}</div>`;
+      console.error('[SFDT] Inspector load error:', err, 'Object:', _objectName, 'Record:', _recordId);
+      body.innerHTML = `<div class="sfdt-error">Error loading ${_esc(_objectName || 'record')}: ${_esc(err.message)}</div>`;
     }
   }
 
@@ -352,7 +355,9 @@ const InspectorPanel = (() => {
     _create();
     _panel.classList.add('visible');
     _visible = true;
+    // Always re-detect from URL (Lightning SPA may have changed the URL)
     const detected = _detectRecordFromUrl();
+    console.log('[SFDT] Inspector show — detected:', detected, 'URL:', window.location.href);
     if (detected) {
       _loadRecord(detected.objectName, detected.recordId);
     } else {
@@ -368,7 +373,7 @@ const InspectorPanel = (() => {
             <span style="color:#f9e2af">Example URLs that work:</span><br>
             <code style="font-size:11px;color:#a6adc8">/lightning/r/Account/001.../view</code><br>
             <code style="font-size:11px;color:#a6adc8">/lightning/r/Contact/003.../view</code><br><br>
-            <span style="color:#7f849c;font-size:11px">Setup pages, list views, and home pages are not supported.</span>
+            <span style="color:#7f849c;font-size:11px">Current URL: ${_esc(window.location.pathname)}</span>
           </div>
         </div>`;
       _container.querySelector('#insp-footer').innerHTML = '';

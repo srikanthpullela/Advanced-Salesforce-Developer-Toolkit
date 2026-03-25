@@ -36,6 +36,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return false;
 
+    case 'update-context-menu':
+      chrome.contextMenus.update('sfdt-inspect-record', {
+        visible: !!message.hasRecord
+      }).catch(() => {});
+      return false;
+
     case 'get-extension-info':
       sendResponse({
         version: chrome.runtime.getManifest().version,

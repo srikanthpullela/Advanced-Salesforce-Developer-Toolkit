@@ -494,6 +494,24 @@ mark.sfdt-highlight {
   to { transform: rotate(360deg); }
 }
 
+.sfdt-searching-banner {
+  padding: 6px 16px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg3, #313244);
+  border-bottom: 1px solid var(--border, #313244);
+  color: var(--accent, #89b4fa);
+  font-size: 12px !important;
+  font-weight: 500;
+  animation: sfdt-banner-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes sfdt-banner-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
 .sfdt-dynamic-loader {
   padding: 10px 16px !important;
   text-align: center;

@@ -172,37 +172,40 @@ const SearchService = (() => {
     // Escape SOSL reserved characters: ? & | ! { } [ ] ( ) ^ ~ * : \ " ' + -
     const safeQuery = query.replace(/([?&|!{}\[\]()^~*:\\"'+\-])/g, '\\$1');
 
-    // Build SOSL RETURNING clause based on type filter
+    // Build SOSL RETURNING clause — only entity types that support Tooling SOSL
+    // AuraDefinitionBundle and LightningComponentBundle do NOT support search
     const returning = [
       'ApexClass(Id, Name, NamespacePrefix)',
       'ApexTrigger(Id, Name, NamespacePrefix, TableEnumOrId)',
-      'ApexPage(Id, Name, NamespacePrefix)'
+      'ApexPage(Id, Name, NamespacePrefix)',
+      'ApexComponent(Id, Name, NamespacePrefix)'
     ].join(', ');
 
     const sosl = `FIND {${safeQuery}} IN ALL FIELDS RETURNING ${returning}`;
+    const results = [];
 
     try {
       const response = await API.toolingSearch(sosl);
       const searchRecords = response.searchRecords || response || [];
 
-      const results = [];
       for (const r of searchRecords) {
         const attrs = r.attributes;
         if (!attrs) continue;
         const objType = attrs.type;
 
-        let type, category;
-        if (objType === 'ApexClass') { type = 'ApexClass'; category = 'apexClasses'; }
-        else if (objType === 'ApexTrigger') { type = 'ApexTrigger'; category = 'apexTriggers'; }
-        else if (objType === 'ApexPage') { type = 'VisualforcePage'; category = 'vfPages'; }
+        let type, category, name;
+        if (objType === 'ApexClass') { type = 'ApexClass'; category = 'apexClasses'; name = r.Name; }
+        else if (objType === 'ApexTrigger') { type = 'ApexTrigger'; category = 'apexTriggers'; name = r.Name; }
+        else if (objType === 'ApexPage') { type = 'VisualforcePage'; category = 'vfPages'; name = r.Name; }
+        else if (objType === 'ApexComponent') { type = 'ApexComponent'; category = 'vfComponents'; name = r.Name; }
         else continue;
 
         results.push({
           id: r.Id,
-          name: r.Name,
+          name: name,
           type,
           namespace: r.NamespacePrefix,
-          label: r.NamespacePrefix ? `${r.NamespacePrefix}.${r.Name}` : r.Name,
+          label: r.NamespacePrefix ? `${r.NamespacePrefix}.${name}` : name,
           objectName: r.TableEnumOrId,
           score: 300,
           matchType: 'code',
@@ -211,9 +214,159 @@ const SearchService = (() => {
       }
 
       console.log(`[SFDT] SOSL code search "${query.substring(0, 40)}": ${results.length} results`);
-      return results.slice(0, maxResults);
     } catch (e) {
       console.warn('[SFDT] SOSL code search failed:', e.message);
+    }
+
+    // Search Aura/LWC components by name via Tooling SOQL (they don't support SOSL)
+    const safeLike = query.replace(/'/g, "\\'");
+    const auraLwcSearches = [
+      {
+        soql: `SELECT Id, DeveloperName, NamespacePrefix FROM AuraDefinitionBundle WHERE DeveloperName LIKE '%${safeLike}%' LIMIT 10`,
+        type: 'AuraComponent', category: 'auraComponents'
+      },
+      {
+        soql: `SELECT Id, DeveloperName, NamespacePrefix FROM LightningComponentBundle WHERE DeveloperName LIKE '%${safeLike}%' LIMIT 10`,
+        type: 'LWC', category: 'lwcComponents'
+      }
+    ];
+
+    await Promise.all(auraLwcSearches.map(async (search) => {
+      try {
+        const resp = await API.toolingQuery(search.soql);
+        for (const r of (resp.records || [])) {
+          results.push({
+            id: r.Id,
+            name: r.DeveloperName,
+            type: search.type,
+            namespace: r.NamespacePrefix,
+            label: r.NamespacePrefix ? `${r.NamespacePrefix}.${r.DeveloperName}` : r.DeveloperName,
+            score: 280,
+            matchType: 'code',
+            category: search.category
+          });
+        }
+      } catch (e) {
+        console.warn(`[SFDT] ${search.type} name search failed:`, e.message);
+      }
+    }));
+
+    return results.slice(0, maxResults);
+  }
+
+  /**
+   * Deep code body search using Tooling API SOSL with individual entity queries.
+   * The main searchCode uses a single SOSL across Apex/VF. This function runs
+   * individual targeted SOSL queries per entity type to catch results that the
+   * combined SOSL might miss (e.g. method names inside VF markup).
+   * Also searches inside Aura component source via AuraDefinition.
+   */
+  async function searchCodeDeep(query, onBatchResults, shouldAbort) {
+    if (!query || query.length < 4) return;
+
+    const API = window.SalesforceAPI;
+    if (!API || !API.isConnected()) return;
+
+    const safeQuery = query.replace(/([?&|!{}\[\]()^~*:\\"'+\-])/g, '\\$1');
+
+    // Individual SOSL queries per entity type — catches cases where combined SOSL misses results
+    const soslSearches = [
+      {
+        returning: 'ApexClass(Id, Name, NamespacePrefix)',
+        type: 'ApexClass', category: 'apexClasses', nameField: 'Name'
+      },
+      {
+        returning: 'ApexTrigger(Id, Name, NamespacePrefix)',
+        type: 'ApexTrigger', category: 'apexTriggers', nameField: 'Name'
+      },
+      {
+        returning: 'ApexPage(Id, Name, NamespacePrefix)',
+        type: 'VisualforcePage', category: 'vfPages', nameField: 'Name'
+      },
+      {
+        returning: 'ApexComponent(Id, Name, NamespacePrefix)',
+        type: 'ApexComponent', category: 'vfComponents', nameField: 'Name'
+      }
+    ];
+
+    for (const search of soslSearches) {
+      if (shouldAbort && shouldAbort()) return;
+
+      try {
+        const sosl = `FIND {${safeQuery}} IN ALL FIELDS RETURNING ${search.returning}`;
+        const response = await API.toolingSearch(sosl);
+        const records = (response.searchRecords || response || []);
+
+        if (records.length > 0 && onBatchResults) {
+          const results = records.map(r => ({
+            id: r.Id,
+            name: r[search.nameField],
+            type: search.type,
+            namespace: r.NamespacePrefix,
+            label: r.NamespacePrefix ? `${r.NamespacePrefix}.${r[search.nameField]}` : r[search.nameField],
+            score: 250,
+            matchType: 'code',
+            category: search.category,
+            codeMatch: true
+          }));
+          onBatchResults(results);
+        }
+      } catch (e) {
+        // Individual type search failed — skip silently
+      }
+    }
+
+    console.log('[SFDT] Deep code body search completed');
+  }
+
+  // ─── ID-Based Record Lookup ──────────────────────────
+
+  /**
+   * Detect if query looks like a Salesforce record ID (15 or 18 alphanumeric chars).
+   */
+  function _isSalesforceId(query) {
+    return /^[a-zA-Z0-9]{15}$|^[a-zA-Z0-9]{18}$/.test(query);
+  }
+
+  /**
+   * Look up a record directly by its Salesforce ID.
+   * Uses the key prefix (first 3 chars) to identify the object type from the metadata index.
+   */
+  async function _lookupRecordById(API, recordId) {
+    const keyPrefix = recordId.substring(0, 3);
+
+    // Find the object with this key prefix
+    const idx = META().getIndex ? META().getIndex() : {};
+    const allObjects = idx.objects || [];
+    const obj = allObjects.find(o => o.keyPrefix === keyPrefix);
+
+    if (!obj || !obj.queryable) {
+      console.log(`[SFDT] ID lookup: no object found for key prefix "${keyPrefix}"`);
+      return [];
+    }
+
+    console.log(`[SFDT] ID lookup: ${recordId} → ${obj.name} (prefix ${keyPrefix})`);
+
+    try {
+      const soql = `SELECT Id, Name FROM ${obj.name} WHERE Id = '${recordId}' LIMIT 1`;
+      const response = await API.restQuery(soql);
+      const records = response.records || [];
+
+      return records.map(r => {
+        const friendlyType = obj.label || obj.name.replace(/__c$/, '').replace(/.*__/, '').replace(/_/g, ' ');
+        return {
+          id: r.Id,
+          name: r.Name || r.Id,
+          type: 'Record',
+          sobjectType: obj.name,
+          score: 500,
+          matchType: 'record',
+          category: 'records',
+          recordDetail: friendlyType
+        };
+      });
+    } catch (e) {
+      console.warn(`[SFDT] ID lookup failed for ${obj.name}:`, e.message);
       return [];
     }
   }
@@ -230,6 +383,14 @@ const SearchService = (() => {
     if (!API || !API.isConnected()) return [];
 
     const maxResults = options.maxResults || 40;
+    const trimmed = query.trim();
+
+    // If query looks like a Salesforce ID, do a direct lookup
+    if (_isSalesforceId(trimmed)) {
+      const idResults = await _lookupRecordById(API, trimmed);
+      if (idResults.length > 0) return idResults;
+      // If ID lookup didn't find anything, fall through to normal search
+    }
 
     // Escape SOSL reserved characters
     const safeQuery = query.replace(/([?&|!{}\[\]()^~*:\\"'+\-])/g, '\\$1');
@@ -323,7 +484,11 @@ const SearchService = (() => {
         const nameField = special ? special.nameField : 'Name';
         const displayField = special ? special.displayField : 'Name';
 
-        const soql = `SELECT ${fields} FROM ${objName} WHERE ${nameField} LIKE '${likePattern}' LIMIT 10`;
+        // For objects with a custom name field, also search the auto-number Name field
+        const whereClause = (special && nameField !== 'Name')
+          ? `${nameField} LIKE '${likePattern}' OR Name LIKE '${likePattern}'`
+          : `${nameField} LIKE '${likePattern}'`;
+        const soql = `SELECT ${fields} FROM ${objName} WHERE ${whereClause} LIMIT 10`;
         const response = await API.restQuery(soql);
         const records = response.records || [];
         return records.map(r => {
@@ -372,20 +537,34 @@ const SearchService = (() => {
     const idx = META().getIndex ? META().getIndex() : {};
     const allObjects = idx.objects || [];
 
-    // Objects already covered by fast search (SOSL + hardcoded SOQL + user custom)
+    // Objects actually covered by fast search:
+    // - 7 standard objects (always in SOSL RETURNING)
+    // - Up to 25 searchable __c objects (same slice as searchRecords)
+    // - Hardcoded SOQL fallback + user custom objects
     const userObjs = await _getUserCustomSearchObjects();
+    const standardNames = new Set([
+      'Account', 'Contact', 'Opportunity', 'Lead', 'Case', 'Product2', 'Campaign'
+    ]);
+    const soslCoveredCustom = allObjects
+      .filter(o => o.name && o.name.endsWith('__c') && o.searchable === true && !standardNames.has(o.name))
+      .slice(0, 25)
+      .map(o => o.name);
+
     const alreadyCovered = new Set([
-      'Account', 'Contact', 'Opportunity', 'Lead', 'Case', 'Product2', 'Campaign',
+      ...standardNames,
+      ...soslCoveredCustom,
       'Apttus_Proposal__Proposal__c', 'Apttus_Config2__ProductConfiguration__c',
       'Apttus_Config2__ProductAttributeValue__c',
-      ...userObjs,
-      ...allObjects.filter(o => o.searchable === true).map(o => o.name)
+      ...userObjs
     ]);
 
-    // Queryable custom objects not yet covered
+    // Queryable custom objects not yet covered by fast search
     const dynamicObjs = allObjects
       .filter(o => o.name && o.queryable === true && !alreadyCovered.has(o.name) && o.name.endsWith('__c'))
       .map(o => o.name);
+
+    console.log(`[SFDT] Dynamic search: ${dynamicObjs.length} objects to query (${allObjects.length} total, ${alreadyCovered.size} covered)`);
+    if (dynamicObjs.length > 0) console.log('[SFDT] Dynamic objects:', dynamicObjs.slice(0, 10).join(', '), dynamicObjs.length > 10 ? `... +${dynamicObjs.length - 10} more` : '');
 
     if (dynamicObjs.length === 0) return;
 
@@ -413,7 +592,11 @@ const SearchService = (() => {
           const nameField = special ? special.nameField : 'Name';
           const displayField = special ? special.displayField : 'Name';
 
-          const soql = `SELECT ${fields} FROM ${objName} WHERE ${nameField} LIKE '${likePattern}' LIMIT 5`;
+          // For objects with a custom name field, also search the auto-number Name field
+          const whereClause = (special && nameField !== 'Name')
+            ? `${nameField} LIKE '${likePattern}' OR Name LIKE '${likePattern}'`
+            : `${nameField} LIKE '${likePattern}'`;
+          const soql = `SELECT ${fields} FROM ${objName} WHERE ${whereClause} LIMIT 5`;
           const response = await API.restQuery(soql);
           const records = response.records || [];
           return records.map(r => {
@@ -636,7 +819,7 @@ const SearchService = (() => {
             fieldDataType: r.DataType || 'Unknown',
             entityName: entityApi,
             entityLabel: objLabelMap[entityApi] || entityApi,
-            score: 200,
+            score: 350,
             matchType: 'field',
             category: 'fields'
           });
@@ -662,7 +845,7 @@ const SearchService = (() => {
             fieldDataType: r.DataType || 'Unknown',
             entityName: entityApi,
             entityLabel: objLabelMap[entityApi] || entityApi,
-            score: 200,
+            score: 350,
             matchType: 'field',
             category: 'fields'
           });
@@ -692,7 +875,7 @@ const SearchService = (() => {
           fieldDataType: 'Custom Field',
           entityName: entityName,
           entityLabel: entityName,
-          score: 200,
+          score: 350,
           matchType: 'field',
           category: 'fields'
         };
@@ -757,6 +940,7 @@ const SearchService = (() => {
   return {
     searchAll,
     searchCode,
+    searchCodeDeep,
     searchRecords,
     searchRecordsDynamic,
     searchFields,

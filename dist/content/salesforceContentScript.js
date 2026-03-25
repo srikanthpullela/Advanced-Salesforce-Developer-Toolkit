@@ -25,6 +25,8 @@
   // ─── Register listeners IMMEDIATELY (before session connect) ─────
   chrome.runtime.onMessage.addListener(_handleMessage);
   document.addEventListener('keydown', _handleKeyboard, true);
+  document.addEventListener('contextmenu', _updateContextMenu, true);
+  document.addEventListener('mousedown', _handleOutsideClick, true);
   console.log('[SFDT] Listeners registered.');
 
   // ─── Page Detection ───────────────────────────────────
@@ -149,6 +151,45 @@
       }
       if (closed) return;
     }
+  }
+
+  // ─── Context Menu Record Detection ────────────────────
+
+  function _hasRecordOnPage() {
+    const url = window.location.href;
+    // Lightning record page: /lightning/r/ObjectName/001xxxxxxxxxxxx/view
+    if (/\/lightning\/r\/\w+\/[a-zA-Z0-9]{15,18}(?:\/|$|#|\?)/.test(url)) return true;
+    // Classic record page: /001xxxxxxxxxxxx
+    if (/\/[a-zA-Z0-9]{15,18}(?:\?|$|#)/.test(url)) {
+      const match = url.match(/\/([a-zA-Z0-9]{15,18})(?:\?|$|#)/);
+      if (match) {
+        const id = match[1];
+        // Salesforce IDs start with a 3-char key prefix; filter out setup paths
+        if (/^[a-zA-Z0-9]{3}[0-9A-Za-z]{12,15}$/.test(id)) return true;
+      }
+    }
+    return false;
+  }
+
+  function _updateContextMenu() {
+    try {
+      chrome.runtime.sendMessage({ action: 'update-context-menu', hasRecord: _hasRecordOnPage() });
+    } catch { /* Extension context may be invalidated */ }
+  }
+
+  // ─── Click Outside to Close Panels ────────────────────
+
+  function _handleOutsideClick(e) {
+    // If the click is inside any SFDT shadow host, ignore it
+    const target = e.target;
+    if (target && target.id && target.id.startsWith('sfdt-host-')) return;
+    if (target && target.closest && target.closest('[id^="sfdt-host-"]')) return;
+
+    // Close any visible side panels (not modals — they have their own backdrops)
+    if (INSPECTOR.isVisible()) INSPECTOR.hide();
+    if (SOQL.isVisible()) SOQL.hide();
+    if (DEBUGLOG.isVisible()) DEBUGLOG.hide();
+    if (EXECANON.isVisible()) EXECANON.hide();
   }
 
   // ─── Message Handler (from background/popup) ─────────

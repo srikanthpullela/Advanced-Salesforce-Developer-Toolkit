@@ -12,12 +12,15 @@ const SearchPalette = (() => {
   let _input = null;
   let _resultsList = null;
   let _statusBar = null;
+  let _searchingBanner = null;
   let _visible = false;
   let _selectedIndex = 0;
   let _currentResults = [];
   let _debounceTimer = null;
   let _codeSearchTimer = null;
   let _codeSearchAbortId = 0;
+  let _deepCodeSearchAbortId = 0;
+  let _deepCodeSearchRunning = false;
   let _recordSearchTimer = null;
   let _recordSearchAbortId = 0;
   let _fieldSearchTimer = null;
@@ -65,6 +68,10 @@ const SearchPalette = (() => {
             <span class="sfdt-shortcut">ESC</span>
           </div>
           <div class="sfdt-filters"></div>
+          <div class="sfdt-searching-banner" id="sfdt-searching-banner" style="display:none">
+            <span class="sfdt-spinner"></span>
+            <span class="sfdt-searching-text">Searching...</span>
+          </div>
           <div class="sfdt-results"></div>
           <div class="sfdt-status-bar">
             <span class="sfdt-status-text">Type to search records, metadata, and code</span>
@@ -81,6 +88,7 @@ const SearchPalette = (() => {
     _resultsList = _container.querySelector('.sfdt-results');
     _statusBar = _container.querySelector('.sfdt-status-text');
     const metaStatus = _container.querySelector('.sfdt-status-meta');
+    _searchingBanner = _container.querySelector('#sfdt-searching-banner');
 
     // Build filter chips
     const filtersContainer = _container.querySelector('.sfdt-filters');
@@ -159,12 +167,16 @@ const SearchPalette = (() => {
     clearTimeout(_fieldSearchTimer);
     _dynamicSearchAbortId++; // Cancel any running dynamic search
     _dynamicSearchRunning = false;
+    _deepCodeSearchAbortId++; // Cancel any running deep code search
+    _deepCodeSearchRunning = false;
     _debounceTimer = setTimeout(() => _performSearch(_input.value), 50);
   }
 
   function _performSearch(query) {
     if (!query || query.trim().length === 0) {
       _currentResults = [];
+      _pendingSearches.clear();
+      _updateSearchingBanner();
       _showSearchHistory();
       _statusBar.textContent = _searchHistory.length > 0
         ? `${_searchHistory.length} recent searches`
@@ -246,6 +258,7 @@ const SearchPalette = (() => {
     if (trimmed.length >= 3 && (!_activeFilter || _activeFilter === 'Field')) _pendingSearches.add('field');
 
     _renderResults(results);
+    _updateSearchingBanner();
 
     const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
     _statusBar.textContent = `${results.length} result${results.length !== 1 ? 's' : ''} (${elapsed}ms)${filterNote}`;
@@ -298,37 +311,87 @@ const SearchPalette = (() => {
       if (!_input || _input.value.trim() !== query) return;
 
       _pendingSearches.delete('code');
+      _updateSearchingBanner();
 
       if (codeResults.length === 0) {
         // No code results — update status and check if all async searches are done
         const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
         _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote}`;
         if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
-        return;
-      }
+      } else {
+        // Merge code results with existing name results (deduplicate by id)
+        const existingIds = new Set(_currentResults.map(r => r.id));
+        const newCodeResults = codeResults.filter(r => !existingIds.has(r.id));
 
-      // Merge code results with existing name results (deduplicate by id)
-      const existingIds = new Set(_currentResults.map(r => r.id));
-      const newCodeResults = codeResults.filter(r => !existingIds.has(r.id));
-
-      if (newCodeResults.length > 0) {
-        // Add code label to distinguish
-        for (const r of newCodeResults) {
-          r.codeMatches = [{ line: 0, text: `Contains "${query}"` }];
+        if (newCodeResults.length > 0) {
+          // Add code label to distinguish
+          for (const r of newCodeResults) {
+            r.codeMatches = [{ line: 0, text: `Contains "${query}"` }];
+          }
+          _currentResults = [..._currentResults, ...newCodeResults];
+          _currentResults.sort((a, b) => b.score - a.score);
+          _renderResults(_currentResults);
         }
-        _currentResults = [..._currentResults, ...newCodeResults];
-        _currentResults.sort((a, b) => b.score - a.score);
-        _renderResults(_currentResults);
+
+        const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+        const codeNote = newCodeResults.length > 0 ? ` + ${newCodeResults.length} code` : '';
+        _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${codeNote}${filterNote}`;
       }
 
-      const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
-      const codeNote = newCodeResults.length > 0 ? ` + ${newCodeResults.length} code` : '';
-      _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${codeNote}${filterNote}`;
+      // Fire deep code body search (SOQL LIKE on Body/Markup) to find method names, variables, etc.
+      if (query.length >= 4 && SEARCH().searchCodeDeep) {
+        _performDeepCodeSearch(query);
+      }
     } catch (e) {
       console.warn('[SFDT] Code search error:', e.message);
       _pendingSearches.delete('code');
+      _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
+  }
+
+  function _performDeepCodeSearch(query) {
+    _deepCodeSearchAbortId++;
+    const myAbortId = _deepCodeSearchAbortId;
+    _deepCodeSearchRunning = true;
+    _appendBottomLoader();
+
+    SEARCH().searchCodeDeep(
+      query,
+      // onBatchResults callback — append new results as they arrive
+      (newResults) => {
+        if (myAbortId !== _deepCodeSearchAbortId || !_visible) return;
+        if (!_input || _input.value.trim() !== query) return;
+
+        const existingIds = new Set(_currentResults.map(r => r.id));
+        const fresh = newResults.filter(r => !existingIds.has(r.id));
+        if (fresh.length > 0) {
+          for (const r of fresh) {
+            r.codeMatches = [{ line: 0, text: `Body contains "${query}"` }];
+          }
+          _currentResults = [..._currentResults, ...fresh];
+          _currentResults.sort((a, b) => b.score - a.score);
+          _renderResults(_currentResults);
+          if (_deepCodeSearchRunning) _appendBottomLoader();
+
+          const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+          _statusBar.textContent = `${_currentResults.length} results${filterNote}`;
+        }
+      },
+      // shouldAbort callback
+      () => myAbortId !== _deepCodeSearchAbortId || !_visible
+    ).then(() => {
+      if (myAbortId !== _deepCodeSearchAbortId) return;
+      _deepCodeSearchRunning = false;
+      _removeBottomLoader();
+      _updateSearchingBanner();
+      const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+      _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote}`;
+    }).catch(() => {
+      _deepCodeSearchRunning = false;
+      _removeBottomLoader();
+      _updateSearchingBanner();
+    });
   }
 
   async function _performRecordSearch(query, abortId) {
@@ -340,6 +403,7 @@ const SearchPalette = (() => {
       if (!_input || _input.value.trim() !== query) return;
 
       _pendingSearches.delete('record');
+      _updateSearchingBanner();
 
       if (recordResults.length === 0) {
         const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
@@ -371,6 +435,7 @@ const SearchPalette = (() => {
     } catch (e) {
       console.warn('[SFDT] Record search error:', e.message);
       _pendingSearches.delete('record');
+      _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
   }
@@ -406,11 +471,13 @@ const SearchPalette = (() => {
       if (myAbortId !== _dynamicSearchAbortId) return;
       _dynamicSearchRunning = false;
       _removeBottomLoader();
+      _updateSearchingBanner();
       const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
       _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote}`;
     }).catch(() => {
       _dynamicSearchRunning = false;
       _removeBottomLoader();
+      _updateSearchingBanner();
     });
   }
 
@@ -429,6 +496,23 @@ const SearchPalette = (() => {
     if (existing) existing.remove();
   }
 
+  function _updateSearchingBanner() {
+    if (!_searchingBanner) return;
+    const pending = [];
+    if (_pendingSearches.has('code') || _deepCodeSearchRunning) pending.push('code');
+    if (_pendingSearches.has('record') || _dynamicSearchRunning) pending.push('records');
+    if (_pendingSearches.has('field')) pending.push('fields');
+
+    if (pending.length === 0) {
+      _searchingBanner.style.display = 'none';
+      return;
+    }
+
+    const text = 'Searching ' + pending.join(', ') + '...';
+    _searchingBanner.querySelector('.sfdt-searching-text').textContent = text;
+    _searchingBanner.style.display = '';
+  }
+
   async function _performFieldSearch(query, abortId) {
     try {
       const fieldResults = await SEARCH().searchFields(query);
@@ -440,6 +524,7 @@ const SearchPalette = (() => {
       const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
 
       _pendingSearches.delete('field');
+      _updateSearchingBanner();
 
       if (fieldResults.length === 0) {
         if (_activeFilter === 'Field') {
@@ -465,6 +550,7 @@ const SearchPalette = (() => {
     } catch (e) {
       console.warn('[SFDT] Field search error:', e.message);
       _pendingSearches.delete('field');
+      _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
   }
@@ -647,9 +733,14 @@ const SearchPalette = (() => {
     // For records, navigate to the record page directly
     if (result.matchType === 'record' && result.id) {
       const base = window.SalesforceAPI.getInstanceUrl();
-      const url = `${base}/lightning/r/${result.sobjectType}/${result.id}/view`;
+      const isLightning = base.includes('lightning.force.com')
+        || document.querySelector('one-app-nav-bar')
+        || window.location.pathname.startsWith('/lightning');
+      const url = isLightning
+        ? `${base}/lightning/r/${result.sobjectType}/${result.id}/view`
+        : `${base}/${result.id}`;
       _openUrl(url, newTab);
-      hide();
+      if (!newTab) hide();
       return;
     }
 
@@ -669,7 +760,7 @@ const SearchPalette = (() => {
         url = `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(result.entityName)}&setupid=CustomObjects`;
       }
       _openUrl(url, newTab);
-      hide();
+      if (!newTab) hide();
       return;
     }
 
@@ -677,7 +768,7 @@ const SearchPalette = (() => {
     if (url) {
       _openUrl(url, newTab);
     }
-    hide();
+    if (!newTab) hide();
   }
 
   function _addToHistory(query, result) {

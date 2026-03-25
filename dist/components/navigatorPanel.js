@@ -64,35 +64,42 @@ const NavigatorPanel = (() => {
     }
   }
 
+  function _isLightning() {
+    const base = window.SalesforceAPI.getInstanceUrl();
+    return base.includes('lightning.force.com')
+      || !!document.querySelector('one-app-nav-bar')
+      || window.location.pathname.startsWith('/lightning');
+  }
+
   const SETUP_SHORTCUTS = [
-    { name: 'Apex Classes', icon: 'code', path: '/lightning/setup/ApexClasses/home' },
-    { name: 'Apex Triggers', icon: 'bolt', path: '/lightning/setup/ApexTriggers/home' },
-    { name: 'Auth Providers', icon: 'lock', path: '/lightning/setup/AuthProvidersPage/home' },
-    { name: 'Connected Apps', icon: 'link', path: '/lightning/setup/ConnectedApplication/home' },
-    { name: 'Custom Labels', icon: 'tag', path: '/lightning/setup/ExternalStrings/home' },
-    { name: 'Custom Metadata Types', icon: 'file', path: '/lightning/setup/CustomMetadata/home' },
-    { name: 'Custom Settings', icon: 'settings', path: '/lightning/setup/CustomSettings/home' },
-    { name: 'Dashboards', icon: 'chart', path: '/lightning/o/Dashboard/home' },
-    { name: 'Data Loader', icon: 'database', path: '/lightning/setup/DataManagementDataLoader/home' },
-    { name: 'Debug Logs', icon: 'terminal', path: '/lightning/setup/ApexDebugLogs/home' },
-    { name: 'Deployment Status', icon: 'rocket', path: '/lightning/setup/DeployStatus/home' },
-    { name: 'Developer Console', icon: 'terminal', path: '/_ui/common/apex/debug/ApexCSIPage' },
-    { name: 'Email Templates', icon: 'mail', path: '/lightning/setup/CommunicationTemplatesEmail/home' },
-    { name: 'Flows', icon: 'git', path: '/lightning/setup/Flows/home' },
-    { name: 'Installed Packages', icon: 'download', path: '/lightning/setup/ImportedPackage/home' },
-    { name: 'Lightning Components', icon: 'layout', path: '/lightning/setup/LightningComponentBundles/home' },
-    { name: 'Named Credentials', icon: 'lock', path: '/lightning/setup/NamedCredential/home' },
-    { name: 'Object Manager', icon: 'folder', path: '/lightning/setup/ObjectManager/home' },
-    { name: 'Permission Sets', icon: 'lock', path: '/lightning/setup/PermSets/home' },
-    { name: 'Platform Events', icon: 'bolt', path: '/lightning/setup/EventObjects/home' },
-    { name: 'Profiles', icon: 'user', path: '/lightning/setup/Profiles/home' },
-    { name: 'Remote Site Settings', icon: 'globe', path: '/lightning/setup/SecurityRemoteProxy/home' },
-    { name: 'Reports', icon: 'chart', path: '/lightning/o/Report/home' },
-    { name: 'Scheduled Jobs', icon: 'clock', path: '/lightning/setup/ScheduledJobs/home' },
-    { name: 'Static Resources', icon: 'box', path: '/lightning/setup/StaticResources/home' },
-    { name: 'Tabs', icon: 'layout', path: '/lightning/setup/Tabs/home' },
-    { name: 'Users', icon: 'user', path: '/lightning/setup/ManageUsers/home' },
-    { name: 'Visualforce Pages', icon: 'file', path: '/lightning/setup/ApexPages/home' }
+    { name: 'Apex Classes', icon: 'code', path: '/lightning/setup/ApexClasses/home', classicPath: '/setup/build/listApexClass.apexp' },
+    { name: 'Apex Triggers', icon: 'bolt', path: '/lightning/setup/ApexTriggers/home', classicPath: '/setup/build/listApexTrigger.apexp' },
+    { name: 'Auth Providers', icon: 'lock', path: '/lightning/setup/AuthProvidersPage/home', classicPath: '/setup/secur/AuthProviderPage.apexp' },
+    { name: 'Connected Apps', icon: 'link', path: '/lightning/setup/ConnectedApplication/home', classicPath: '/app/mgmt/forceconnectedapps/forceAppList.apexp' },
+    { name: 'Custom Labels', icon: 'tag', path: '/lightning/setup/ExternalStrings/home', classicPath: '/101?setupid=ExternalStrings' },
+    { name: 'Custom Metadata Types', icon: 'file', path: '/lightning/setup/CustomMetadata/home', classicPath: '/setup/ui/listCustomMetadata.apexp' },
+    { name: 'Custom Settings', icon: 'settings', path: '/lightning/setup/CustomSettings/home', classicPath: '/setup/ui/listCustomSettings.apexp' },
+    { name: 'Dashboards', icon: 'chart', path: '/lightning/o/Dashboard/home', classicPath: '/01Z' },
+    { name: 'Data Loader', icon: 'database', path: '/lightning/setup/DataManagementDataLoader/home', classicPath: '/ui/setup/dataimporter/DataImporterPage' },
+    { name: 'Debug Logs', icon: 'terminal', path: '/lightning/setup/ApexDebugLogs/home', classicPath: '/setup/ui/listApexTraces.apexp' },
+    { name: 'Deployment Status', icon: 'rocket', path: '/lightning/setup/DeployStatus/home', classicPath: '/changemgmt/monitorDeployment.apexp' },
+    { name: 'Developer Console', icon: 'terminal', path: '/_ui/common/apex/debug/ApexCSIPage', classicPath: '/_ui/common/apex/debug/ApexCSIPage' },
+    { name: 'Email Templates', icon: 'mail', path: '/lightning/setup/CommunicationTemplatesEmail/home', classicPath: '/email/admin/listEmailTemplate.apexp' },
+    { name: 'Flows', icon: 'git', path: '/lightning/setup/Flows/home', classicPath: '/300' },
+    { name: 'Installed Packages', icon: 'download', path: '/lightning/setup/ImportedPackage/home', classicPath: '/0A3' },
+    { name: 'Lightning Components', icon: 'layout', path: '/lightning/setup/LightningComponentBundles/home', classicPath: '/setup/build/listLightningComponentBundle.apexp' },
+    { name: 'Named Credentials', icon: 'lock', path: '/lightning/setup/NamedCredential/home', classicPath: '/0XA' },
+    { name: 'Object Manager', icon: 'folder', path: '/lightning/setup/ObjectManager/home', classicPath: '/p/setup/custent/CustomObjectsPage?setupid=CustomObjects' },
+    { name: 'Permission Sets', icon: 'lock', path: '/lightning/setup/PermSets/home', classicPath: '/0PS' },
+    { name: 'Platform Events', icon: 'bolt', path: '/lightning/setup/EventObjects/home', classicPath: '/setup/build/listEventObjects.apexp' },
+    { name: 'Profiles', icon: 'user', path: '/lightning/setup/Profiles/home', classicPath: '/00e' },
+    { name: 'Remote Site Settings', icon: 'globe', path: '/lightning/setup/SecurityRemoteProxy/home', classicPath: '/0rp' },
+    { name: 'Reports', icon: 'chart', path: '/lightning/o/Report/home', classicPath: '/00O' },
+    { name: 'Scheduled Jobs', icon: 'clock', path: '/lightning/setup/ScheduledJobs/home', classicPath: '/08e' },
+    { name: 'Static Resources', icon: 'box', path: '/lightning/setup/StaticResources/home', classicPath: '/setup/build/listStaticResource.apexp' },
+    { name: 'Tabs', icon: 'layout', path: '/lightning/setup/Tabs/home', classicPath: '/setup/ui/listTabs.apexp' },
+    { name: 'Users', icon: 'user', path: '/lightning/setup/ManageUsers/home', classicPath: '/005' },
+    { name: 'Visualforce Pages', icon: 'file', path: '/lightning/setup/ApexPages/home', classicPath: '/setup/build/listApexPage.apexp' }
   ];
 
   function _create() {
@@ -503,7 +510,9 @@ const NavigatorPanel = (() => {
 
     let url;
     if (result.type === 'SetupPage') {
-      url = window.SalesforceAPI.getInstanceUrl() + result.path;
+      const base = window.SalesforceAPI.getInstanceUrl();
+      const usePath = _isLightning() ? result.path : (result.classicPath || result.path);
+      url = base + usePath;
     } else {
       url = META().getSetupUrl(result);
     }

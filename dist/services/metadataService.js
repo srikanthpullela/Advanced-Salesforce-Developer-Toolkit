@@ -664,6 +664,7 @@ const MetadataService = (() => {
       case 'ApexTrigger':
         return `${base}/lightning/setup/ApexClasses/page?address=%2F${item.id}`;
       case 'VisualforcePage':
+      case 'ApexComponent':
         return `${base}/lightning/setup/ApexPages/page?address=%2F${item.id}`;
       case 'LWC':
         return `${base}/lightning/setup/LightningComponentBundles/page?address=%2F${item.id}`;
@@ -756,6 +757,7 @@ const MetadataService = (() => {
         return `${base}/${item.id}`;
       case 'LWC':
       case 'AuraComponent':
+      case 'ApexComponent':
         return `${base}/${item.id}`;
       case 'Tab':
         if (item.url) {
