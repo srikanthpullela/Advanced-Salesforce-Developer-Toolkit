@@ -48,7 +48,7 @@
         await chrome.tabs.sendMessage(tab.id, { action });
         window.close();
       } catch (err) {
-        console.warn('[SFDT] Could not reach content script:', err.message);
+        console.debug('[SFDT] Could not reach content script:', err.message);
         // Content script not loaded — try injecting it first
         try {
           await chrome.scripting.executeScript({
@@ -74,7 +74,7 @@
             window.close();
           }, 500);
         } catch (injectErr) {
-          console.error('[SFDT] Script injection failed:', injectErr);
+          console.debug('[SFDT] Script injection failed:', injectErr);
         }
       }
     }

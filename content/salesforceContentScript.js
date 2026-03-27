@@ -75,10 +75,10 @@
     if (!connected) {
       _initRetries++;
       if (_initRetries <= MAX_INIT_RETRIES) {
-        console.warn(`[SFDT] Could not obtain session. Retry ${_initRetries}/${MAX_INIT_RETRIES} in 5s...`);
+        console.debug(`[SFDT] Could not obtain session. Retry ${_initRetries}/${MAX_INIT_RETRIES} in 5s...`);
         setTimeout(init, 5000);
       } else {
-        console.warn('[SFDT] Could not obtain session after retries. Extension inactive on this page.');
+        console.debug('[SFDT] Could not obtain session after retries. Extension inactive on this page.');
       }
       return;
     }
@@ -93,7 +93,7 @@
       const count = Object.values(idx).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
       console.log('[SFDT] Metadata index built. Total items:', count, 'Categories:', Object.keys(idx).join(', '));
     }).catch(err => {
-      console.error('[SFDT] Index build error:', err);
+      console.debug('[SFDT] Index build error:', err);
     });
 
     // Add floating toolbar

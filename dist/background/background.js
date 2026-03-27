@@ -173,7 +173,7 @@ async function _getSessionForUrl(url) {
 
     return { sessionId: null };
   } catch (err) {
-    console.error('[SFDT] Cookie retrieval error:', err);
+    console.debug('[SFDT] Cookie retrieval error:', err);
     return { sessionId: null };
   }
 }

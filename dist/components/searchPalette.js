@@ -344,7 +344,7 @@ const SearchPalette = (() => {
         _performDeepCodeSearch(query);
       }
     } catch (e) {
-      console.warn('[SFDT] Code search error:', e.message);
+      console.debug('[SFDT] Code search error:', e.message);
       _pendingSearches.delete('code');
       _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
@@ -434,7 +434,7 @@ const SearchPalette = (() => {
         _performDynamicSearch(query);
       }
     } catch (e) {
-      console.warn('[SFDT] Record search error:', e.message);
+      console.debug('[SFDT] Record search error:', e.message);
       _pendingSearches.delete('record');
       _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
@@ -549,7 +549,7 @@ const SearchPalette = (() => {
       const total = _currentResults.length;
       _statusBar.textContent = `${total} result${total !== 1 ? 's' : ''}${fieldNote}${filterNote}`;
     } catch (e) {
-      console.warn('[SFDT] Field search error:', e.message);
+      console.debug('[SFDT] Field search error:', e.message);
       _pendingSearches.delete('field');
       _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);

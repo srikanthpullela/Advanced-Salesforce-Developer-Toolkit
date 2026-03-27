@@ -131,7 +131,7 @@ const SalesforceAPI = (() => {
       }
     } catch { /* ignore */ }
 
-    console.warn('[SFDT] Could not obtain session token');
+    console.debug('[SFDT] Could not obtain session token');
   }
 
   let _reconnectPromise = null;

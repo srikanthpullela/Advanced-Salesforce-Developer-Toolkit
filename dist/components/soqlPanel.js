@@ -833,13 +833,13 @@ const SOQLPanel = (() => {
             const fullData = await API.restGet(`/sobjects/${_queriedSObjectType}/${recordId}?fields=${fetchFields}`);
             fullRecord = fullData;
           } catch (fetchErr) {
-            console.warn('[SFDT] Full record fetch failed, using query data:', fetchErr.message);
+            console.debug('[SFDT] Full record fetch failed, using query data:', fetchErr.message);
           }
         }
       }
     } catch (err) {
       // Fallback to query keys if describe fails
-      console.warn('[SFDT] Describe failed:', err.message);
+      console.debug('[SFDT] Describe failed:', err.message);
       const editableKeys = _getEditableKeys(keys);
       allFields = editableKeys.map(k => ({ name: k, label: k, type: 'string', nillable: true }));
     }

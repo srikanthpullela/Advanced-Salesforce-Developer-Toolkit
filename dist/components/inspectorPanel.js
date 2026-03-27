@@ -129,7 +129,7 @@ const InspectorPanel = (() => {
       _renderFields();
       _updateFooter();
     } catch (err) {
-      console.error('[SFDT] Inspector load error:', err, 'Object:', _objectName, 'Record:', _recordId);
+      console.debug('[SFDT] Inspector load error:', err, 'Object:', _objectName, 'Record:', _recordId);
       body.innerHTML = `<div class="sfdt-error">Error loading ${_esc(_objectName || 'record')}: ${_esc(err.message)}</div>`;
     }
   }

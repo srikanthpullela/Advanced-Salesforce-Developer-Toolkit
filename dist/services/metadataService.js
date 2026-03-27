@@ -402,7 +402,7 @@ const MetadataService = (() => {
 
     // Verify API connection first
     if (!API.isConnected()) {
-      console.warn('[SFDT] Cannot build index — not connected to Salesforce.');
+      console.debug('[SFDT] Cannot build index — not connected to Salesforce.');
       _indexing = false;
       return _metadataIndex;
     }
@@ -411,7 +411,7 @@ const MetadataService = (() => {
     try {
       await API.restGet('/limits/');
     } catch (e) {
-      console.warn('[SFDT] Session invalid, skipping index build:', e.message);
+      console.debug('[SFDT] Session invalid, skipping index build:', e.message);
       _indexing = false;
       return _metadataIndex;
     }
@@ -510,7 +510,7 @@ const MetadataService = (() => {
         queryable: o.queryable
       }));
     } catch (e) {
-      console.error('[SFDT] Index build error (batch 1):', e);
+      console.debug('[SFDT] Index build error (batch 1):', e);
     }
 
     // Batch 2 — secondary metadata
@@ -557,7 +557,7 @@ const MetadataService = (() => {
         devName: d.DeveloperName
       }));
     } catch (e) {
-      console.error('[SFDT] Index build error (batch 2):', e);
+      console.debug('[SFDT] Index build error (batch 2):', e);
     }
 
     // Batch 3 — remaining metadata
@@ -619,7 +619,7 @@ const MetadataService = (() => {
         field: a.Apttus_Config2__Field__c || ''
       }));
     } catch (e) {
-      console.error('[SFDT] Index build error (batch 3):', e);
+      console.debug('[SFDT] Index build error (batch 3):', e);
     }
 
     _metadataIndex = index;

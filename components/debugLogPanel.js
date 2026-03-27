@@ -1074,7 +1074,7 @@ const DebugLogPanel = (() => {
       }
       _loadLogs();
     } catch (err) {
-      console.warn('[SFDT] Clear logs error:', err.message);
+      console.debug('[SFDT] Clear logs error:', err.message);
     }
   }
 

@@ -215,7 +215,7 @@ const SearchService = (() => {
 
       console.log(`[SFDT] SOSL code search "${query.substring(0, 40)}": ${results.length} results`);
     } catch (e) {
-      console.warn('[SFDT] SOSL code search failed:', e.message);
+      console.debug('[SFDT] SOSL code search failed:', e.message);
     }
 
     // Search Aura/LWC components by name via Tooling SOQL (they don't support SOSL)
@@ -247,7 +247,7 @@ const SearchService = (() => {
           });
         }
       } catch (e) {
-        console.warn(`[SFDT] ${search.type} name search failed:`, e.message);
+        console.debug(`[SFDT] ${search.type} name search failed:`, e.message);
       }
     }));
 
@@ -366,7 +366,7 @@ const SearchService = (() => {
         };
       });
     } catch (e) {
-      console.warn(`[SFDT] ID lookup failed for ${obj.name}:`, e.message);
+      console.debug(`[SFDT] ID lookup failed for ${obj.name}:`, e.message);
       return [];
     }
   }
@@ -634,7 +634,7 @@ const SearchService = (() => {
       const response = await API.globalSearch(sosl);
       return _parseSoslResults(response, maxResults);
     } catch (e1) {
-      console.warn('[SFDT] Full SOSL search failed:', e1.message, '— retrying with standard objects only');
+      console.debug('[SFDT] Full SOSL search failed:', e1.message, '— retrying with standard objects only');
     }
 
     // Attempt 2: Standard objects only
@@ -643,7 +643,7 @@ const SearchService = (() => {
       const response = await API.globalSearch(sosl2);
       return _parseSoslResults(response, maxResults);
     } catch (e2) {
-      console.warn('[SFDT] Standard SOSL search failed:', e2.message, '— retrying with minimal objects');
+      console.debug('[SFDT] Standard SOSL search failed:', e2.message, '— retrying with minimal objects');
     }
 
     // Attempt 3: Minimal — just Account, Contact, Product2
@@ -652,7 +652,7 @@ const SearchService = (() => {
       const response = await API.globalSearch(sosl3);
       return _parseSoslResults(response, maxResults);
     } catch (e3) {
-      console.warn('[SFDT] Minimal SOSL search failed:', e3.message);
+      console.debug('[SFDT] Minimal SOSL search failed:', e3.message);
     }
 
     // Attempt 4: Use parameterized search as final fallback (searches everything, simpler API)
@@ -660,7 +660,7 @@ const SearchService = (() => {
       const response = await API.parameterizedSearch(safeQuery);
       return _parseSoslResults(response, maxResults);
     } catch (e4) {
-      console.warn('[SFDT] Parameterized search also failed:', e4.message);
+      console.debug('[SFDT] Parameterized search also failed:', e4.message);
     }
 
     return [];
@@ -826,7 +826,7 @@ const SearchService = (() => {
           });
         }
       } catch (err) {
-        console.warn('[SFDT] EntityParticle label search failed for batch:', err.message);
+        console.debug('[SFDT] EntityParticle label search failed for batch:', err.message);
       }
 
       // Also search by API name
@@ -852,7 +852,7 @@ const SearchService = (() => {
           });
         }
       } catch (err) {
-        console.warn('[SFDT] EntityParticle apiName search failed for batch:', err.message);
+        console.debug('[SFDT] EntityParticle apiName search failed for batch:', err.message);
       }
     }
 
@@ -882,7 +882,7 @@ const SearchService = (() => {
         };
       });
     } catch (err) {
-      console.warn('[SFDT] CustomField search also failed:', err.message);
+      console.debug('[SFDT] CustomField search also failed:', err.message);
     }
 
     return [];
