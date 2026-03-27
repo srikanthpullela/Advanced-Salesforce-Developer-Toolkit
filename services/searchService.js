@@ -558,10 +558,11 @@ const SearchService = (() => {
       ...userObjs
     ]);
 
-    // Queryable custom objects not yet covered by fast search
+    // Queryable custom objects not yet covered by fast search (capped to limit API usage)
     const dynamicObjs = allObjects
       .filter(o => o.name && o.queryable === true && !alreadyCovered.has(o.name) && o.name.endsWith('__c'))
-      .map(o => o.name);
+      .map(o => o.name)
+      .slice(0, 50);
 
     console.log(`[SFDT] Dynamic search: ${dynamicObjs.length} objects to query (${allObjects.length} total, ${alreadyCovered.size} covered)`);
     if (dynamicObjs.length > 0) console.log('[SFDT] Dynamic objects:', dynamicObjs.slice(0, 10).join(', '), dynamicObjs.length > 10 ? `... +${dynamicObjs.length - 10} more` : '');

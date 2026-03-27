@@ -49,6 +49,7 @@ const SearchPalette = (() => {
     { key: 'Report', label: 'Reports' },
     { key: 'Tab', label: 'Tabs' },
     { key: 'CustomSetting', label: 'Settings' },
+    { key: 'StaticResource', label: 'Resources' },
     { key: 'Attribute', label: 'Attributes' }
   ];
 

@@ -261,8 +261,8 @@ const MetadataService = (() => {
     const cached = CACHE.get('metadata', 'staticResources');
     if (cached) return cached;
     try {
-      const res = await API.toolingQuery(
-        "SELECT Id, Name, ContentType, NamespacePrefix FROM StaticResource WHERE NamespacePrefix = null ORDER BY Name"
+      const res = await API.restQuery(
+        "SELECT Id, Name, Description, ContentType, NamespacePrefix FROM StaticResource ORDER BY Name"
       );
       const records = res.records || [];
       CACHE.set('metadata', 'staticResources', records);
@@ -579,7 +579,9 @@ const MetadataService = (() => {
 
       index.staticResources = staticRes.map(s => ({
         id: s.Id, name: s.Name, type: 'StaticResource', icon: '📦',
-        contentType: s.ContentType
+        contentType: s.ContentType,
+        namespace: s.NamespacePrefix || null,
+        label: s.Description || s.Name
       }));
 
       index.emailTemplates = emailTpls.map(e => ({
