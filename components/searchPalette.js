@@ -50,7 +50,8 @@ const SearchPalette = (() => {
     { key: 'Tab', label: 'Tabs' },
     { key: 'CustomSetting', label: 'Settings' },
     { key: 'StaticResource', label: 'Resources' },
-    { key: 'Attribute', label: 'Attributes' }
+    { key: 'Attribute', label: 'Attributes' },
+    { key: 'SetupPage', label: 'Setup' }
   ];
 
   function _create() {
@@ -121,7 +122,7 @@ const SearchPalette = (() => {
     } else {
       const idx = META().getIndex();
       const count = Object.values(idx).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
-      metaStatus.textContent = `${count} items`;
+      metaStatus.textContent = count > 0 ? `${count} items` : 'Indexing...';
     }
   }
 
@@ -834,7 +835,9 @@ const SearchPalette = (() => {
     _input.value = '';
     _currentResults = [];
     _selectedIndex = 0;
+    _pendingSearches.clear();
     _renderResults([]);
+    if (_searchingBanner) _searchingBanner.style.display = 'none';
     _statusBar.textContent = 'Type to search records, metadata, and code';
     requestAnimationFrame(() => _input.focus());
   }
@@ -844,6 +847,22 @@ const SearchPalette = (() => {
       _container.querySelector('#sfdt-search-palette').classList.remove('visible');
     }
     _visible = false;
+
+    // Cancel all pending searches immediately
+    clearTimeout(_debounceTimer);
+    clearTimeout(_codeSearchTimer);
+    clearTimeout(_recordSearchTimer);
+    clearTimeout(_fieldSearchTimer);
+    _codeSearchAbortId++;
+    _deepCodeSearchAbortId++;
+    _recordSearchAbortId++;
+    _fieldSearchAbortId++;
+    _dynamicSearchAbortId++;
+    _deepCodeSearchRunning = false;
+    _dynamicSearchRunning = false;
+    _pendingSearches.clear();
+    if (_searchingBanner) _searchingBanner.style.display = 'none';
+    _removeBottomLoader();
   }
 
   function toggle() { _visible ? hide() : show(); }

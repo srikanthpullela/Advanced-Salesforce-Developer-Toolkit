@@ -765,6 +765,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 10px !important;
 }
 
 .sfdt-soql-editor-area {
@@ -776,6 +777,7 @@
 
 .sfdt-soql-editor-wrapper {
   position: relative;
+  z-index: 10;
 }
 
 .sfdt-soql-editor {
@@ -984,6 +986,28 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  position: relative;
+  cursor: pointer;
+}
+
+.sfdt-soql-history-item.sfdt-error {
+  border-left: 2px solid var(--sfdt-red);
+}
+
+/* Custom scrollable tooltip for history */
+.sfdt-history-tooltip {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  background: var(--sfdt-bg);
+  border: 1px solid var(--sfdt-blue);
+  border-radius: var(--sfdt-radius-sm);
+  padding: 10px 14px;
+  z-index: 60;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  max-height: 200px;
+  overflow-y: auto;
+  pointer-events: auto;
 }
 
 .sfdt-soql-history-item.sfdt-error {
@@ -1020,18 +1044,19 @@
 
 /* ─── Autocomplete Dropdown ──────────────────────────── */
 
-.sfdt-soql-autocomplete {
+.sfdt-autocomplete {
   position: absolute;
-  bottom: 0;
+  top: 100%;
   left: 16px;
+  right: 16px;
   display: none;
   background: var(--sfdt-bg2);
   border: 1px solid var(--sfdt-border);
-  border-radius: var(--sfdt-radius-sm);
+  border-radius: 0 0 var(--sfdt-radius-sm) var(--sfdt-radius-sm);
   box-shadow: var(--sfdt-shadow-sm);
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
-  z-index: 10;
+  z-index: 100;
   min-width: 250px;
 }
 
@@ -1064,6 +1089,63 @@
   font-size: 10px;
   color: var(--sfdt-fg3);
   text-transform: uppercase;
+}
+
+/* ─── Field Hints Panel (shown below toolbar after comma) ── */
+
+.sfdt-field-hints {
+  display: none;
+  background: var(--sfdt-bg2);
+  border-top: 1px solid var(--sfdt-border);
+  padding: 6px 12px;
+  max-height: 120px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.sfdt-field-hints.visible {
+  display: block;
+}
+
+.sfdt-field-hints-title {
+  font-size: 10px;
+  color: var(--sfdt-fg3);
+  margin-bottom: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sfdt-field-hints-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sfdt-field-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--sfdt-bg);
+  border: 1px solid var(--sfdt-border);
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: var(--sfdt-mono);
+  color: var(--sfdt-fg);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.sfdt-field-chip:hover {
+  background: var(--sfdt-bg-selected);
+  border-color: var(--sfdt-blue);
+}
+
+.sfdt-field-chip-type {
+  font-size: 9px;
+  color: var(--sfdt-fg3);
+  text-transform: lowercase;
 }
 
 /* ─── Floating Toolbar ───────────────────────────────── */

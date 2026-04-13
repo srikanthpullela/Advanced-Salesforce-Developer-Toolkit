@@ -44,7 +44,7 @@ const ExecuteAnonymousPanel = (() => {
                 <button class="sfdt-btn sfdt-btn-sm" id="ea-clear" title="Clear Code">${I.x} Clear</button>
               </div>
             </div>
-            <textarea id="ea-code" class="sfdt-execanon-textarea" spellcheck="false" placeholder="// Enter Apex code here...&#10;System.debug('Hello World!');"
+            <textarea id="ea-code" style="padding: 0 10px !important;" class="sfdt-execanon-textarea" spellcheck="false" placeholder="// Enter Apex code here...&#10;System.debug('Hello World!');"
             ></textarea>
             <div class="sfdt-execanon-run-bar">
               <button class="sfdt-btn sfdt-btn-primary sfdt-btn-run" id="ea-run">${I.play} Execute (Ctrl+Enter)</button>
@@ -56,8 +56,8 @@ const ExecuteAnonymousPanel = (() => {
             <div class="sfdt-execanon-results-header">
               <span style="font-size:11px;color:#7f849c">Results</span>
               <div style="display:flex;gap:4px">
-                <button class="sfdt-btn sfdt-btn-sm sfdt-btn-primary" id="ea-tab-output">Output</button>
-                <button class="sfdt-btn sfdt-btn-sm" id="ea-tab-debugs">Debug Log</button>
+
+                <button class="sfdt-btn sfdt-btn-sm" id="ea-tab-debugs" title="Open Debug Logs in Salesforce Setup">🔗 Debug Logs</button>
               </div>
             </div>
             <div class="sfdt-execanon-results-body" id="ea-results">
@@ -94,8 +94,7 @@ const ExecuteAnonymousPanel = (() => {
     _container.querySelector('#ea-run').addEventListener('click', _execute);
     _container.querySelector('#ea-clear').addEventListener('click', () => { codeEl.value = ''; codeEl.focus(); });
     _container.querySelector('#ea-save').addEventListener('click', _saveSnippet);
-    _container.querySelector('#ea-tab-output').addEventListener('click', () => _setResultTab('output'));
-    _container.querySelector('#ea-tab-debugs').addEventListener('click', () => _setResultTab('debugs'));
+    _container.querySelector('#ea-tab-debugs').addEventListener('click', _openDebugLogsPage);
     _container.querySelector('#ea-resize').addEventListener('click', () => _panel.classList.toggle('expanded'));
 
     // Initialize drag-to-resize
@@ -126,7 +125,94 @@ const ExecuteAnonymousPanel = (() => {
   // ─── Execute ──────────────────────────────────────────
 
   let _lastOutput = '';
-  let _lastDebugLog = '';
+  let _cachedUserId = null;
+  let _cachedDebugLevelId = null;
+
+  /**
+   * Get the current user's ID (cached after first call).
+   */
+  async function _getUserId() {
+    if (_cachedUserId) return _cachedUserId;
+    const user = await API().getCurrentUser();
+    _cachedUserId = user.id || user.Id;
+    return _cachedUserId;
+  }
+
+  /**
+   * Ensure a DebugLevel record exists for SFDT executions.
+   * Reuses an existing one if found, otherwise creates a new one.
+   */
+  async function _ensureDebugLevel() {
+    if (_cachedDebugLevelId) return _cachedDebugLevelId;
+
+    // Check if our debug level already exists
+    try {
+      const existing = await API().toolingQuery(
+        "SELECT Id FROM DebugLevel WHERE DeveloperName = 'SFDT_Execute' LIMIT 1"
+      );
+      if (existing.records && existing.records.length > 0) {
+        _cachedDebugLevelId = existing.records[0].Id;
+        return _cachedDebugLevelId;
+      }
+    } catch { /* not found, create it */ }
+
+    // Create a new debug level with full visibility
+    const result = await API().toolingPost('DebugLevel', {
+      DeveloperName: 'SFDT_Execute',
+      MasterLabel: 'SFDT Execute Anonymous',
+      ApexCode: 'FINEST',
+      ApexProfiling: 'INFO',
+      Callout: 'INFO',
+      Database: 'INFO',
+      System: 'DEBUG',
+      Validation: 'INFO',
+      Visualforce: 'INFO',
+      Workflow: 'INFO',
+      Nba: 'INFO',
+      Wave: 'INFO'
+    });
+    _cachedDebugLevelId = result.id || result.Id;
+    return _cachedDebugLevelId;
+  }
+
+  /**
+   * Create a temporary TraceFlag for the current user so Salesforce generates a debug log.
+   * Returns the TraceFlag ID for cleanup.
+   */
+  async function _ensureTraceFlag(userId, debugLevelId) {
+    const now = new Date().toISOString();
+    const expiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    // Check if there's already an active trace flag for this user
+    try {
+      const existing = await API().toolingQuery(
+        `SELECT Id, ExpirationDate FROM TraceFlag WHERE TracedEntityId = '${userId}' AND LogType = 'DEVELOPER_LOG' AND ExpirationDate > ${now} LIMIT 1`
+      );
+      if (existing.records && existing.records.length > 0) {
+        return existing.records[0].Id;
+      }
+    } catch { /* query failed, try creating */ }
+
+    // Try to create a new trace flag
+    try {
+      const result = await API().toolingPost('TraceFlag', {
+        TracedEntityId: userId,
+        DebugLevelId: debugLevelId,
+        LogType: 'DEVELOPER_LOG',
+        ExpirationDate: expiration
+      });
+      return result.id || result.Id;
+    } catch (err) {
+      // If one already exists with overlapping dates, that's fine — we'll get logs anyway
+      if (err.message && err.message.includes('already being traced')) {
+        console.debug('[SFDT] Trace flag already exists, continuing');
+        return 'existing';
+      }
+      // For other errors, log but don't block execution
+      console.debug('[SFDT] Trace flag creation failed:', err.message);
+      return null;
+    }
+  }
 
   async function _execute() {
     const codeEl = _container.querySelector('#ea-code');
@@ -138,11 +224,20 @@ const ExecuteAnonymousPanel = (() => {
     const resultsBody = _container.querySelector('#ea-results');
 
     runBtn.disabled = true;
-    statusEl.textContent = 'Executing...';
+    statusEl.textContent = 'Setting up trace flag...';
     statusEl.className = 'sfdt-execanon-status running';
-    resultsBody.innerHTML = '<div class="sfdt-loading">Executing Apex...</div>';
+    resultsBody.innerHTML = '<div class="sfdt-loading">Setting up trace flag...</div>';
 
     try {
+      // Step 1: Ensure trace flag exists so Salesforce generates a debug log
+      const userId = await _getUserId();
+      const debugLevelId = await _ensureDebugLevel();
+      await _ensureTraceFlag(userId, debugLevelId);
+
+      // Step 2: Execute the anonymous Apex
+      statusEl.textContent = 'Executing Apex...';
+      resultsBody.innerHTML = '<div class="sfdt-loading">Executing Apex...</div>';
+
       const result = await API().executeAnonymous(code);
 
       const success = result.success === true || result.success === 'true';
@@ -173,21 +268,21 @@ const ExecuteAnonymousPanel = (() => {
           ${exceptionStackTrace ? `<pre class="sfdt-exec-stacktrace">${_esc(exceptionStackTrace)}</pre>` : ''}
         </div>`;
       } else {
-        statusEl.textContent = 'Success ✓';
-        statusEl.className = 'sfdt-execanon-status success';
+        statusEl.textContent = 'Fetching debug log...';
         _lastOutput = `<div class="sfdt-exec-success">
           <div class="sfdt-exec-success-title">✓ Executed Successfully</div>
         </div>`;
       }
 
-      // Try to fetch the most recent debug log for this execution
-      _lastDebugLog = '';
+      // Step 3: Fetch the debug log generated by this execution
+      statusEl.textContent = compiled ? (success ? 'Fetching debug log...' : statusEl.textContent) : statusEl.textContent;
       try {
+        // Wait for Salesforce to write the log
+        await new Promise(r => setTimeout(r, 2000));
         const logsResult = await API().getDebugLogs(1);
         const logs = logsResult.records || [];
         if (logs.length > 0) {
           const logBody = await API().getDebugLogBody(logs[0].Id);
-          _lastDebugLog = logBody;
           // Parse USER_DEBUG statements from the log
           const debugLines = logBody.split('\n')
             .filter(l => l.includes('|USER_DEBUG|'))
@@ -207,9 +302,23 @@ const ExecuteAnonymousPanel = (() => {
               }).join('')}
             </div>`;
           }
+
+          if (success) {
+            statusEl.textContent = `Success ✓ — ${debugLines.length} debug statement${debugLines.length !== 1 ? 's' : ''}`;
+            statusEl.className = 'sfdt-execanon-status success';
+          }
+        } else {
+          if (success) {
+            statusEl.textContent = 'Success ✓ — no debug log generated';
+            statusEl.className = 'sfdt-execanon-status success';
+          }
         }
       } catch (logErr) {
-        // Not critical if we can't get the debug log
+        console.debug('[SFDT] Debug log fetch error:', logErr.message);
+        if (success) {
+          statusEl.textContent = 'Success ✓ — could not fetch debug log';
+          statusEl.className = 'sfdt-execanon-status success';
+        }
       }
 
       _setResultTab('output');
@@ -227,32 +336,15 @@ const ExecuteAnonymousPanel = (() => {
     }
   }
 
+  function _openDebugLogsPage() {
+    const base = API().getInstanceUrl();
+    const url = `${base}/setup/ui/listApexTraces.apexp?retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DMonitoring&setupid=ApexDebugLogs`;
+    window.open(url, '_blank');
+  }
+
   function _setResultTab(tab) {
     const resultsBody = _container.querySelector('#ea-results');
-    const outBtn = _container.querySelector('#ea-tab-output');
-    const dbgBtn = _container.querySelector('#ea-tab-debugs');
-
-    outBtn.classList.toggle('sfdt-btn-primary', tab === 'output');
-    dbgBtn.classList.toggle('sfdt-btn-primary', tab === 'debugs');
-
-    if (tab === 'output') {
-      resultsBody.innerHTML = _lastOutput || '<div style="padding:16px;color:#7f849c;font-size:12px">No output yet.</div>';
-    } else {
-      if (_lastDebugLog) {
-        const lines = _lastDebugLog.split('\n');
-        resultsBody.innerHTML = `<div class="sfdt-raw-log sfdt-exec-raw-log">${
-          lines.slice(0, 500).map((l, i) => {
-            let cls = '';
-            if (l.includes('|USER_DEBUG|')) cls = 'sfdt-log-user_debug';
-            else if (l.includes('|FATAL_ERROR|') || l.includes('|EXCEPTION_THROWN|')) cls = 'sfdt-log-error';
-            else if (l.includes('WARN')) cls = 'sfdt-log-warn';
-            return `<div class="sfdt-log-line ${cls}"><span class="sfdt-log-num">${i + 1}</span><span class="sfdt-log-text">${_esc(l)}</span></div>`;
-          }).join('')
-        }${lines.length > 500 ? '<div style="padding:4px 8px;color:#7f849c">...truncated</div>' : ''}</div>`;
-      } else {
-        resultsBody.innerHTML = '<div style="padding:16px;color:#7f849c;font-size:12px">No debug log available for this execution.</div>';
-      }
-    }
+    resultsBody.innerHTML = _lastOutput || '<div style="padding:16px;color:#7f849c;font-size:12px">No output yet.</div>';
   }
 
   // ─── Snippets ─────────────────────────────────────────
@@ -389,7 +481,10 @@ const ExecuteAnonymousPanel = (() => {
     _create();
     _panel.classList.add('visible');
     _visible = true;
-    setTimeout(() => _container.querySelector('#ea-code')?.focus(), 100);
+    requestAnimationFrame(() => {
+      const code = _container.querySelector('#ea-code');
+      if (code) { code.focus(); code.setSelectionRange(code.value.length, code.value.length); }
+    });
   }
 
   function hide() {

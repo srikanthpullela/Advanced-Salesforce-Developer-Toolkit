@@ -18,6 +18,7 @@ const InspectorPanel = (() => {
   let _sortBy = 'label';
   let _sortDir = 'asc';
   let _compareRecord = null;
+  let _compareFilter = null; // null = show all, 'diff' = different only, 'same' = identical only
 
   function _create() {
     if (_container) return;
@@ -80,12 +81,38 @@ const InspectorPanel = (() => {
 
   function _detectRecordFromUrl() {
     const url = window.location.href;
+    const params = new URLSearchParams(window.location.search);
+
     // Lightning: /lightning/r/Account/001xxx/view  or  /lightning/r/Account/001xxx  or  /lightning/r/Account/001xxx#details
     const lightningMatch = url.match(/\/lightning\/r\/(\w+)\/([a-zA-Z0-9]{15,18})(?:\/|$|#|\?)/);
     if (lightningMatch) return { objectName: lightningMatch[1], recordId: lightningMatch[2] };
-    // Classic: /001xxx  or  /001xxx?nooverride=1  or  /001xxx#section
+
+    // Visualforce / Classic query params: ?id=001xxx  or  ?Id=001xxx  or  ?recordId=001xxx
+    // Handles URLs like: /apex/SomePage?id=a0YD4000003aawm&sfdc.override=1
+    const idParam = params.get('id') || params.get('Id') || params.get('ID') ||
+                    params.get('recordId') || params.get('RecordId') ||
+                    params.get('recordid');
+    if (idParam) {
+      const cleanId = idParam.trim();
+      if (/^[a-zA-Z0-9]{15,18}$/.test(cleanId)) {
+        return { objectName: null, recordId: cleanId };
+      }
+    }
+
+    // Classic path: /001xxx  or  /001xxx?nooverride=1  or  /001xxx#section
+    // Only match if the path segment looks like a Salesforce ID (starts with a known key prefix pattern)
     const classicMatch = url.match(/\/([a-zA-Z0-9]{15,18})(?:\?|$|\/|#)/);
-    if (classicMatch) return { objectName: null, recordId: classicMatch[1] };
+    if (classicMatch) {
+      const candidate = classicMatch[1];
+      // Avoid matching path segments like "apex", "setup", "home" etc.
+      // Salesforce IDs start with a 3-char key prefix; first char is always 0-9 or a-zA-Z
+      // and they contain a mix of alphanumeric chars. Filter out common false positives.
+      const falsePositives = /^(apex|lightning|setup|home|servlet|one|page|classic|console|ui|aura|visualforce|secur|services|login|sfc)$/i;
+      if (!falsePositives.test(candidate)) {
+        return { objectName: null, recordId: candidate };
+      }
+    }
+
     return null;
   }
 
@@ -152,6 +179,14 @@ const InspectorPanel = (() => {
       );
     }
 
+    // Compare filter: show only different or identical fields
+    if (_compareRecord && _compareFilter) {
+      fields = fields.filter(f => {
+        const isDiff = JSON.stringify(_currentRecord[f.name]) !== JSON.stringify(_compareRecord[f.name]);
+        return _compareFilter === 'diff' ? isDiff : !isDiff;
+      });
+    }
+
     fields.sort((a, b) => {
       let cmp = 0;
       switch (_sortBy) {
@@ -168,17 +203,77 @@ const InspectorPanel = (() => {
       return;
     }
 
+    // Compare summary banner
+    let compareBanner = '';
+    if (_compareRecord) {
+      const compareId = _compareRecord.Id || _compareRecord.id || '?';
+      const compareName = _compareRecord.Name || _compareRecord.DeveloperName || compareId;
+      let diffCount = 0, sameCount = 0;
+      fields.forEach(f => {
+        const v1 = _currentRecord[f.name];
+        const v2 = _compareRecord[f.name];
+        if (JSON.stringify(v1) !== JSON.stringify(v2)) diffCount++;
+        else sameCount++;
+      });
+      compareBanner = `
+        <div class="sfdt-compare-banner">
+          <div class="sfdt-compare-banner-left">
+            <span style="font-weight:600;color:#89b4fa">Comparing Records</span>
+            <span class="sfdt-compare-ids">
+              <span class="sfdt-compare-label-a" title="Current record">A: ${_esc(String(_recordId).substring(0, 15))}</span>
+              <span style="color:#585b70">vs</span>
+              <span class="sfdt-compare-label-b" title="Compare record">B: ${_esc(String(compareId).substring(0, 15))}</span>
+            </span>
+          </div>
+          <div class="sfdt-compare-stats">
+            <button class="sfdt-btn sfdt-btn-sm sfdt-compare-filter-btn sfdt-compare-btn-diff ${_compareFilter === 'diff' ? 'sfdt-filter-active-diff' : ''}" id="insp-filter-diff">${diffCount} different</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-compare-filter-btn sfdt-compare-btn-same ${_compareFilter === 'same' ? 'sfdt-filter-active-same' : ''}" id="insp-filter-same">${sameCount} identical</button>
+            ${_compareFilter ? '<button class="sfdt-btn sfdt-btn-sm" id="insp-filter-all" title="Show all fields">Show All</button>' : ''}
+            <button class="sfdt-btn sfdt-btn-sm sfdt-compare-clear" id="insp-clear-compare">✕ Clear</button>
+          </div>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
+      ${compareBanner}
       <table class="sfdt-field-table">
         <thead><tr>
-          <th>Label</th><th>API Name</th><th>Value</th><th>Type</th>
-          ${_compareRecord ? '<th>Compare</th>' : ''}
+          <th>Label</th><th>API Name</th>
+          <th>${_compareRecord ? 'Value (A — current)' : 'Value'}</th>
+          <th>Type</th>
+          ${_compareRecord ? '<th>Value (B — compare)</th><th>Diff</th>' : ''}
         </tr></thead>
         <tbody>
           ${fields.map(f => _renderFieldRow(f)).join('')}
         </tbody>
       </table>
     `;
+
+    if (_compareRecord) {
+      const clearBtn = body.querySelector('#insp-clear-compare');
+      if (clearBtn) clearBtn.addEventListener('click', () => {
+        _compareRecord = null;
+        _compareFilter = null;
+        _renderFields();
+        _updateFooter();
+      });
+      const diffBtn = body.querySelector('#insp-filter-diff');
+      if (diffBtn) diffBtn.addEventListener('click', () => {
+        _compareFilter = _compareFilter === 'diff' ? null : 'diff';
+        _renderFields();
+      });
+      const sameBtn = body.querySelector('#insp-filter-same');
+      if (sameBtn) sameBtn.addEventListener('click', () => {
+        _compareFilter = _compareFilter === 'same' ? null : 'same';
+        _renderFields();
+      });
+      const allBtn = body.querySelector('#insp-filter-all');
+      if (allBtn) allBtn.addEventListener('click', () => {
+        _compareFilter = null;
+        _renderFields();
+      });
+    }
 
     body.querySelectorAll('.sfdt-copyable').forEach(el => {
       el.addEventListener('click', () => {
@@ -201,28 +296,39 @@ const InspectorPanel = (() => {
     const isRelation = field.referenceTo && field.referenceTo.length > 0;
     const typeClass = `sfdt-type-${field.type.toLowerCase()}`;
 
-    let compareCell = '';
+    let compareCells = '';
+    let rowDiffClass = '';
     if (_compareRecord) {
       const compVal = _compareRecord[field.name];
       const isDiff = JSON.stringify(val) !== JSON.stringify(compVal);
       const compDisplay = compVal === null || compVal === undefined
         ? '<span class="sfdt-null">null</span>' : _esc(String(compVal));
-      compareCell = `<td class="${isDiff ? 'sfdt-diff' : ''}">${compDisplay}</td>`;
+
+      let diffIndicator = '<span class="sfdt-diff-same">—</span>';
+      if (isDiff) {
+        rowDiffClass = 'sfdt-row-diff';
+        diffIndicator = '<span class="sfdt-diff-changed">Changed</span>';
+      }
+
+      compareCells = `
+        <td class="sfdt-td-value ${isDiff ? 'sfdt-diff-highlight-b' : ''}">${compDisplay}</td>
+        <td class="sfdt-td-diff">${diffIndicator}</td>
+      `;
     }
 
     return `
-      <tr class="sfdt-field-row ${field.custom ? 'sfdt-custom-field' : ''}">
+      <tr class="sfdt-field-row ${field.custom ? 'sfdt-custom-field' : ''} ${rowDiffClass}">
         <td class="sfdt-td-label">${_esc(field.label)}</td>
         <td class="sfdt-td-api">
           <span class="sfdt-copyable" data-copy="${_esc(field.name)}">${_esc(field.name)}</span>
           ${isRelation ? '<span class="sfdt-relation" title="Relationship">&#8594;</span>' : ''}
         </td>
-        <td class="sfdt-td-value">
+        <td class="sfdt-td-value ${_compareRecord && rowDiffClass ? 'sfdt-diff-highlight-a' : ''}">
           <span class="sfdt-inline-edit sfdt-copyable" data-field="${_esc(field.name)}"
                 data-copy="${val != null ? _esc(String(val)) : ''}">${displayVal}</span>
         </td>
         <td><span class="${typeClass}">${_esc(field.type)}</span></td>
-        ${compareCell}
+        ${compareCells}
       </tr>
     `;
   }
@@ -303,17 +409,31 @@ const InspectorPanel = (() => {
   }
 
   function _promptCompare() {
-    const compareId = prompt('Enter Record ID to compare:');
+    // If already comparing, clear it
+    if (_compareRecord) {
+      _compareRecord = null;
+      _compareFilter = null;
+      _renderFields();
+      _updateFooter();
+      return;
+    }
+    const compareId = prompt('Enter Record ID to compare with the current record:');
     if (!compareId || compareId.length < 15) return;
-    _loadCompareRecord(compareId);
+    _loadCompareRecord(compareId.trim());
   }
 
   async function _loadCompareRecord(recordId) {
+    const body = _container.querySelector('#insp-body');
+    body.innerHTML = '<div class="sfdt-loading">Loading comparison record...</div>';
     try {
       _compareRecord = await API().getRecord(_objectName, recordId);
       _renderFields();
+      _updateFooter();
     } catch (err) {
-      alert(`Could not load record: ${err.message}`);
+      _compareRecord = null;
+      _renderFields();
+      body.insertAdjacentHTML('afterbegin',
+        `<div class="sfdt-error" style="margin:8px 0;padding:8px 12px;font-size:12px">Compare failed: ${_esc(err.message)}</div>`);
     }
   }
 
@@ -325,7 +445,21 @@ const InspectorPanel = (() => {
       const v = _currentRecord[f.name];
       return v !== null && v !== undefined;
     }).length : 0;
-    footer.innerHTML = `<span>Total: ${total}</span><span>Custom: ${custom}</span><span>Populated: ${populated}</span>`;
+
+    let compareInfo = '';
+    if (_compareRecord) {
+      const compareId = _compareRecord.Id || _compareRecord.id || '?';
+      compareInfo = `<span style="color:#cba6f7">Comparing with ${_esc(String(compareId).substring(0, 15))}</span>`;
+
+      // Update compare button visual
+      const compareBtn = _container.querySelector('#insp-compare');
+      if (compareBtn) compareBtn.classList.add('sfdt-btn-active');
+    } else {
+      const compareBtn = _container.querySelector('#insp-compare');
+      if (compareBtn) compareBtn.classList.remove('sfdt-btn-active');
+    }
+
+    footer.innerHTML = `<span>Total: ${total}</span><span>Custom: ${custom}</span><span>Populated: ${populated}</span>${compareInfo}`;
   }
 
   async function _refresh() {
@@ -372,8 +506,9 @@ const InspectorPanel = (() => {
             Navigate to an Account, Contact, Case, or any object record to inspect its fields.<br><br>
             <span style="color:#f9e2af">Example URLs that work:</span><br>
             <code style="font-size:11px;color:#a6adc8">/lightning/r/Account/001.../view</code><br>
-            <code style="font-size:11px;color:#a6adc8">/lightning/r/Contact/003.../view</code><br><br>
-            <span style="color:#7f849c;font-size:11px">Current URL: ${_esc(window.location.pathname)}</span>
+            <code style="font-size:11px;color:#a6adc8">/001xxx (Classic)</code><br>
+            <code style="font-size:11px;color:#a6adc8">/apex/SomePage?id=001xxx (Visualforce)</code><br><br>
+            <span style="color:#7f849c;font-size:11px">Current URL: ${_esc(window.location.pathname + window.location.search)}</span>
           </div>
         </div>`;
       _container.querySelector('#insp-footer').innerHTML = '';

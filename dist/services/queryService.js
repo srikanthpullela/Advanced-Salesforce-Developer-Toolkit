@@ -202,56 +202,143 @@ const QueryService = (() => {
     };
   }
 
-  // ─── History ──────────────────────────────────────────
+  // ─── History (chrome.storage.local — shared across all tabs) ────
+
+  let _historyCache = null;
+  let _favoritesCache = null;
+  let _historyLoaded = false;
+  let _favoritesLoaded = false;
+
+  // Load history from chrome.storage.local into memory cache
+  async function _ensureHistoryLoaded() {
+    if (_historyLoaded) return;
+    try {
+      const data = await chrome.storage.local.get(HISTORY_KEY);
+      _historyCache = data[HISTORY_KEY] || [];
+    } catch {
+      // Fallback to localStorage for compatibility
+      try { _historyCache = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { _historyCache = []; }
+    }
+    _historyLoaded = true;
+  }
+
+  async function _ensureFavoritesLoaded() {
+    if (_favoritesLoaded) return;
+    try {
+      const data = await chrome.storage.local.get(FAVORITES_KEY);
+      _favoritesCache = data[FAVORITES_KEY] || [];
+    } catch {
+      try { _favoritesCache = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch { _favoritesCache = []; }
+    }
+    _favoritesLoaded = true;
+  }
+
+  // Listen for storage changes from other tabs
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes[HISTORY_KEY]) {
+        _historyCache = changes[HISTORY_KEY].newValue || [];
+      }
+      if (changes[FAVORITES_KEY]) {
+        _favoritesCache = changes[FAVORITES_KEY].newValue || [];
+      }
+    });
+  } catch { /* content script may not have access */ }
 
   function _addToHistory(soql, success, executionTime, resultCount) {
-    const history = getHistory();
-    history.unshift({
+    // Fire-and-forget async
+    _addToHistoryAsync(soql, success, executionTime, resultCount);
+  }
+
+  async function _addToHistoryAsync(soql, success, executionTime, resultCount) {
+    await _ensureHistoryLoaded();
+
+    // Deduplicate: if same query exists, remove the old entry and update with latest result
+    const normalized = soql.trim();
+    const existingIdx = _historyCache.findIndex(h => h.query.trim() === normalized);
+    if (existingIdx !== -1) _historyCache.splice(existingIdx, 1);
+
+    _historyCache.unshift({
       query: soql,
       success,
       executionTime,
       resultCount,
       timestamp: Date.now()
     });
-    if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+    if (_historyCache.length > MAX_HISTORY) _historyCache.length = MAX_HISTORY;
     try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    } catch { /* ignore */ }
+      await chrome.storage.local.set({ [HISTORY_KEY]: _historyCache });
+    } catch {
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(_historyCache)); } catch { /* ignore */ }
+    }
   }
 
   function getHistory() {
+    // Return cache synchronously (loaded on first query or panel open)
+    if (_historyCache !== null) return _historyCache;
+    // Fallback for first call before async load
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  }
+
+  async function getHistoryAsync() {
+    await _ensureHistoryLoaded();
+    return _historyCache;
+  }
+
+  async function clearHistory() {
+    _historyCache = [];
     try {
-      return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      await chrome.storage.local.remove(HISTORY_KEY);
+    } catch { /* ignore */ }
+    try { localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ }
+  }
+
+  async function removeHistoryItem(index) {
+    await _ensureHistoryLoaded();
+    _historyCache.splice(index, 1);
+    try {
+      await chrome.storage.local.set({ [HISTORY_KEY]: _historyCache });
     } catch {
-      return [];
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(_historyCache)); } catch { /* ignore */ }
     }
   }
 
-  function clearHistory() {
-    localStorage.removeItem(HISTORY_KEY);
+  // ─── Favorites (chrome.storage.local — shared across all tabs) ──
+
+  async function saveFavorite(name, soql) {
+    await _ensureFavoritesLoaded();
+    _favoritesCache.push({ name, query: soql, timestamp: Date.now() });
+    try {
+      await chrome.storage.local.set({ [FAVORITES_KEY]: _favoritesCache });
+    } catch {
+      try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(_favoritesCache)); } catch { /* ignore */ }
+    }
   }
 
-  // ─── Favorites ────────────────────────────────────────
-
-  function saveFavorite(name, soql) {
-    const favs = getFavorites();
-    favs.push({ name, query: soql, timestamp: Date.now() });
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
-  }
-
-  function removeFavorite(index) {
-    const favs = getFavorites();
-    favs.splice(index, 1);
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+  async function removeFavorite(index) {
+    await _ensureFavoritesLoaded();
+    _favoritesCache.splice(index, 1);
+    try {
+      await chrome.storage.local.set({ [FAVORITES_KEY]: _favoritesCache });
+    } catch {
+      try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(_favoritesCache)); } catch { /* ignore */ }
+    }
   }
 
   function getFavorites() {
-    try {
-      return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
-    } catch {
-      return [];
-    }
+    if (_favoritesCache !== null) return _favoritesCache;
+    try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch { return []; }
   }
+
+  async function getFavoritesAsync() {
+    await _ensureFavoritesLoaded();
+    return _favoritesCache;
+  }
+
+  // Preload caches on init
+  _ensureHistoryLoaded();
+  _ensureFavoritesLoaded();
 
   // ─── Export ───────────────────────────────────────────
 
@@ -306,10 +393,13 @@ const QueryService = (() => {
     analyzeQuery,
     getQueryPlan,
     getHistory,
+    getHistoryAsync,
     clearHistory,
+    removeHistoryItem,
     saveFavorite,
     removeFavorite,
     getFavorites,
+    getFavoritesAsync,
     recordsToCSV,
     recordsToJSON,
     downloadFile

@@ -1,0 +1,81 @@
+Advanced Salesforce Developer Toolkit — The Ultimate Productivity Extension for Salesforce Developers & Admins
+
+🔍 GLOBAL SEARCH (Cmd/Ctrl+Shift+P)
+Instantly search across all Salesforce metadata — custom objects, fields, Apex classes, Apex triggers, Visualforce pages, Lightning components, flows, permission sets, profiles, validation rules, workflow rules, and more. Works like VS Code command palette right inside Salesforce.
+
+🔎 RECORD INSPECTOR
+Inspect any Salesforce record in real time. View all field values, field API names, field types, record type, owner, created/modified dates, and system fields. Copy field API names with one click. Perfect for debugging and troubleshooting data issues in Sales Cloud, Service Cloud, and any Salesforce org.
+
+📝 SOQL QUERY EDITOR
+Write and execute SOQL queries directly from any Salesforce page. Features syntax highlighting, auto-complete for object and field names, query history, and export results to CSV. No more switching to Developer Console or Workbench for quick queries.
+
+🚀 QUICK NAVIGATOR
+Navigate to any Salesforce Setup page instantly. Jump to object manager, custom objects, custom fields, page layouts, record types, Apex classes, Apex triggers, Lightning components, flows, process builder, permission sets, profiles, roles, users, and all admin setup pages with keyboard shortcuts.
+
+🐛 APEX DEBUG LOG VIEWER
+View and monitor Apex debug logs in real time without leaving your current page. Filter by log level, user, operation, and time range. Search within logs. No need to open Developer Console separately.
+
+⚡ EXECUTE ANONYMOUS
+Run Apex code snippets (execute anonymous) directly from any Salesforce page. Test Apex code, run data fixes, execute batch jobs, and debug issues without switching to Developer Console.
+
+📊 DATA BUILDER
+Create and manage test data directly in Salesforce. Build records for any standard or custom object. Ideal for Salesforce QA testing, sandbox data setup, and development.
+
+🎯 CONTEXT MENU INTEGRATION
+Right-click on any Salesforce page to quickly search selected text, inspect the current record, or open SOQL query tool.
+
+⌨️ KEYBOARD SHORTCUTS
+- Cmd/Ctrl+Shift+P — Open global search palette
+- Cmd/Ctrl+Shift+I — Open record inspector
+- Cmd/Ctrl+Shift+Q — Open SOQL query editor
+All features accessible via keyboard for maximum developer productivity.
+
+✅ WORKS EVERYWHERE IN SALESFORCE
+- Salesforce Lightning Experience
+- Salesforce Classic
+- Sales Cloud
+- Service Cloud
+- Experience Cloud (Community Cloud)
+- Marketing Cloud
+- Salesforce CPQ
+- Salesforce Platform
+- Custom Salesforce apps
+- Sandbox orgs
+- Developer Edition orgs
+- Production orgs
+- Visualforce pages
+- Lightning Web Components (LWC) pages
+- Aura components pages
+
+🔒 PRIVACY & SECURITY
+- Only activates on Salesforce domains (*.salesforce.com, *.force.com, *.visualforce.com)
+- Uses your existing Salesforce session — no separate login required
+- No data is collected, stored, or sent to external servers
+- All processing happens locally in your browser
+- Open source and transparent
+
+💡 PERFECT FOR
+- Salesforce Developers
+- Salesforce Administrators
+- Salesforce Consultants
+- Salesforce Architects
+- Salesforce QA Engineers
+- Salesforce Business Analysts
+- AppExchange ISV developers
+- Salesforce DevOps engineers
+- Force.com developers
+- Salesforce integration specialists
+
+🔧 KEY FEATURES SUMMARY
+Salesforce inspector, SOQL query tool, Salesforce search, metadata browser, Apex debug logs, execute anonymous Apex, Salesforce navigator, field inspector, record viewer, data export CSV, Salesforce developer tools, Salesforce admin tools, Salesforce Chrome extension, Salesforce productivity, Force.com tools, Lightning developer tools, Apex code runner, Salesforce DevTools, object manager, custom object search, field API names, Salesforce debugging, Salesforce troubleshooting, Salesforce data management, Salesforce test data, sandbox tools, developer console alternative, workbench alternative, Salesforce inspector alternative, data loader alternative.
+
+⭐ WHY CHOOSE THIS OVER OTHER SALESFORCE EXTENSIONS?
+- All-in-one toolkit — no need for 5 separate extensions
+- Modern UI with dark mode support
+- Keyboard-first design for developer productivity
+- Works in both Lightning and Classic
+- Lightweight and fast — no performance impact
+- Regular updates and active development
+- Free to use
+
+Tags: Salesforce, SFDC, Force.com, Apex, SOQL, SOSL, Visualforce, Lightning, LWC, Aura, Salesforce inspector, Salesforce developer tools, Salesforce admin tools, Salesforce Chrome extension, Salesforce debugging, developer console, workbench, data loader, Salesforce metadata, Salesforce search, Salesforce navigator, record inspector, field inspector, SOQL editor, SOQL query, Apex debug log, execute anonymous, Salesforce productivity, Sales Cloud, Service Cloud, Experience Cloud, Marketing Cloud, Salesforce CPQ, Salesforce Platform, AppExchange, ISV, Salesforce DX, SFDX, Salesforce CLI, Salesforce setup, object manager, custom objects, custom fields, validation rules, workflow rules, process builder, flows, permission sets, profiles, page layouts, record types, Salesforce sandbox, developer edition, Salesforce org, Salesforce data, test data, data management, CSV export, Salesforce troubleshooting, CRM tools, CRM developer tools

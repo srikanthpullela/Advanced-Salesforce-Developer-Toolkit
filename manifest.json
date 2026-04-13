@@ -1,16 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Advanced Salesforce Developer Toolkit",
-  "version": "1.0.0",
-  "description": "Developer productivity extension for Salesforce: search, inspect, navigate, query, and debug metadata from any Salesforce page.",
+  "version": "1.1.0",
+  "description": "Salesforce developer & admin toolkit: record inspector, SOQL query editor, metadata search, Apex debug logs, data builder.",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
-    "tabs",
     "cookies",
-    "webRequest",
-    "clipboardWrite",
     "contextMenus"
   ],
   "host_permissions": [
@@ -105,16 +102,5 @@
     "open-execanon": {
       "description": "Open Execute Anonymous"
     }
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["styles/*", "icons/*"],
-      "matches": [
-        "https://*.salesforce.com/*",
-        "https://*.force.com/*",
-        "https://*.lightning.force.com/*",
-        "https://*.my.salesforce.com/*"
-      ]
-    }
-  ]
+  }
 }

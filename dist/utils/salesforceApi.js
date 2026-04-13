@@ -10,37 +10,115 @@ const SalesforceAPI = (() => {
   let _orgId = null;
   let _connectPromise = null;
 
+  /**
+   * Strip the managed-package namespace from a VF subdomain while preserving
+   * the org name and sandbox name.
+   * VF subdomain formats:
+   *   Production:  {MyDomain}--{Namespace}
+   *   Sandbox:     {MyDomain}--{SandboxName}--{Namespace}
+   * The namespace is always the LAST "--" segment. Everything before it is the
+   * org identity we need to keep.
+   * If there is only one segment (no "--"), return it as-is (no namespace).
+   */
+  function _stripVfNamespace(subdomain) {
+    const parts = subdomain.split('--');
+    if (parts.length <= 1) return subdomain; // no namespace present
+    // Drop the last segment (namespace), keep everything else
+    return parts.slice(0, -1).join('--');
+  }
+
+  /**
+   * Try to discover the Salesforce instance URL dynamically from page globals
+   * before falling back to URL-based derivation. Works on VF, Lightning, and Classic pages.
+   */
+  function _discoverInstanceFromPage() {
+    try {
+      // 1. Salesforce Lightning: sfdcPage / aura config
+      if (window.$A && window.$A.get) {
+        const host = window.$A.get('$Endpoint.orgServerUrl');
+        if (host) return host;
+      }
+    } catch { /* ignore */ }
+
+    try {
+      // 2. Visualforce remoting — the host URL is the correct API endpoint
+      if (window.Visualforce && window.Visualforce.remoting &&
+          window.Visualforce.remoting.Manager) {
+        const providers = window.Visualforce.remoting.Manager.providers;
+        if (providers) {
+          for (const key of Object.keys(providers)) {
+            const url = providers[key] && providers[key].url;
+            if (url) {
+              const parsed = new URL(url);
+              return `${parsed.protocol}//${parsed.hostname}`;
+            }
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    try {
+      // 3. AJAX Toolkit / sforce.connection
+      if (window.sforce && window.sforce.connection && window.sforce.connection.url) {
+        const parsed = new URL(window.sforce.connection.url);
+        return `${parsed.protocol}//${parsed.hostname}`;
+      }
+    } catch { /* ignore */ }
+
+    try {
+      // 4. Look for __sfdcSiteUrl or siteUrlPrefix in inline scripts
+      const scripts = document.querySelectorAll('script');
+      for (const s of scripts) {
+        const text = s.textContent || '';
+        // Match patterns like: "instanceUrl":"https://orgname.my.salesforce.com"
+        const m = text.match(/"instanceUrl"\s*:\s*"(https:\/\/[^"]+\.my\.salesforce\.com)"/);
+        if (m) return m[1];
+      }
+    } catch { /* ignore */ }
+
+    return null;
+  }
+
   function getInstanceUrl() {
     if (!_instanceUrl) {
+      // Prefer dynamic discovery from page globals (works regardless of URL format)
+      const discovered = _discoverInstanceFromPage();
+      if (discovered) {
+        _instanceUrl = discovered;
+        console.debug('[SFDT] Instance discovered from page globals:', _instanceUrl);
+        return _instanceUrl;
+      }
+
+      // Fallback: derive from the current page URL
       const url = new URL(window.location.href);
       let hostname = url.hostname;
 
-      // Lightning domains redirect API calls to *.my.salesforce.com — derive it directly.
-      // Pattern: {org}.lightning.force.com  →  {org}.my.salesforce.com
+      // Lightning domains: {org}.lightning.force.com → {org}.my.salesforce.com
       const lightningMatch = hostname.match(/^(.+?)\.lightning\.force\.com$/);
       if (lightningMatch) {
         hostname = `${lightningMatch[1]}.my.salesforce.com`;
       }
 
-      // Visualforce domains don't support REST API — derive the main Salesforce instance URL.
-      // VF patterns: {org}--{ns}.{pod}.vf.force.com  or  {org}--{ns}.{pod}.visual.force.com
-      //              {org}--{ns}.vf.force.com          (enhanced domains, no pod)
+      // Visualforce domains — derive the main Salesforce instance URL.
+      // Examples:
+      //   cpq--june25--apttus-qpconfig.sandbox.vf.force.com  → cpq--june25.sandbox.my.salesforce.com
+      //   myorg--ns.na50.vf.force.com                        → myorg.na50.my.salesforce.com
+      //   myorg--ns.vf.force.com                             → myorg.my.salesforce.com
       const vfMatch = hostname.match(/^(.+?)\.(.*?)\.(vf\.force\.com|visual\.force\.com|visualforce\.com)$/);
       if (vfMatch) {
-        const orgPart = vfMatch[1].split('--')[0]; // strip namespace
-        const middle = vfMatch[2]; // pod segment(s)
+        const orgPart = _stripVfNamespace(vfMatch[1]); // strip only namespace, keep sandbox name
+        const middle = vfMatch[2]; // pod or "sandbox" segment
         hostname = `${orgPart}.${middle}.my.salesforce.com`;
       } else if (!lightningMatch) {
         // Enhanced domain with no pod: {org}--{ns}.vf.force.com
         const vfSimple = hostname.match(/^(.+?)\.(vf\.force\.com|visual\.force\.com|visualforce\.com)$/);
         if (vfSimple) {
-          const orgPart = vfSimple[1].split('--')[0];
+          const orgPart = _stripVfNamespace(vfSimple[1]);
           hostname = `${orgPart}.my.salesforce.com`;
         }
       }
 
-      // Salesforce-setup domains (enhanced domains setup)
-      // Pattern: {org}.my.salesforce-setup.com → {org}.my.salesforce.com
+      // Salesforce-setup domains: {org}.my.salesforce-setup.com → {org}.my.salesforce.com
       const setupMatch = hostname.match(/^(.+?)\.my\.salesforce-setup\.com$/);
       if (setupMatch) {
         hostname = `${setupMatch[1]}.my.salesforce.com`;
@@ -283,6 +361,19 @@ const SalesforceAPI = (() => {
     return _fetch(`/services/data/${API_VERSION}/tooling${path}`);
   }
 
+  async function toolingPost(sobjectType, data) {
+    return _fetch(`/services/data/${API_VERSION}/tooling/sobjects/${encodeURIComponent(sobjectType)}`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async function toolingDelete(sobjectType, recordId) {
+    return _fetch(`/services/data/${API_VERSION}/tooling/sobjects/${encodeURIComponent(sobjectType)}/${encodeURIComponent(recordId)}`, {
+      method: 'DELETE'
+    });
+  }
+
   async function toolingSearch(sosl) {
     return _fetch(`/services/data/${API_VERSION}/tooling/search/?q=${encodeURIComponent(sosl)}`);
   }
@@ -325,7 +416,7 @@ const SalesforceAPI = (() => {
 
   async function getDebugLogs(limit = 20) {
     return toolingQuery(
-      `SELECT Id, LogUserId, LogLength, LastModifiedDate, Request, Operation, Application, Status, DurationMilliseconds FROM ApexLog ORDER BY LastModifiedDate DESC LIMIT ${parseInt(limit, 10)}`
+      `SELECT Id, LogUserId, LogUser.Name, LogLength, LastModifiedDate, Request, Operation, Application, Status, DurationMilliseconds FROM ApexLog ORDER BY LastModifiedDate DESC LIMIT ${parseInt(limit, 10)}`
     );
   }
 
@@ -345,7 +436,30 @@ const SalesforceAPI = (() => {
   }
 
   async function executeAnonymous(code) {
-    return _fetch(`/services/data/${API_VERSION}/tooling/executeAnonymous/?anonymousBody=${encodeURIComponent(code)}`);
+    // Use GET with code in URL — safe for most code lengths.
+    // For very long code (>4000 chars), the URL may exceed limits on some servers,
+    // but the Tooling API executeAnonymous only supports GET.
+    const encoded = encodeURIComponent(code);
+    const path = `/services/data/${API_VERSION}/tooling/executeAnonymous/?anonymousBody=${encoded}`;
+    
+    try {
+      return await _fetch(path);
+    } catch (err) {
+      // If the normal fetch fails on cross-origin (Classic/VF), retry with explicit GET
+      if (_isCrossOrigin()) {
+        console.debug('[SFDT] executeAnonymous retry via proxy:', err.message);
+        const base = getInstanceUrl();
+        const url = `${base}${path}`;
+        const headers = {
+          'Authorization': `Bearer ${_sessionId}`,
+          'Accept': 'application/json'
+        };
+        const proxyResp = await _bgFetch(url, { method: 'GET', headers });
+        if (!proxyResp.ok) throw new Error(`Execute failed: ${proxyResp.status} ${JSON.stringify(proxyResp.body)}`);
+        return proxyResp.body;
+      }
+      throw err;
+    }
   }
 
   async function getCurrentUser() {
@@ -359,7 +473,7 @@ const SalesforceAPI = (() => {
   return {
     connect, getSessionId, getInstanceUrl, getOrgId, isConnected,
     restQuery, restGet, restPatch, restPost, restDelete,
-    toolingQuery, toolingQueryAll, toolingGet, toolingSearch,
+    toolingQuery, toolingQueryAll, toolingGet, toolingPost, toolingDelete, toolingSearch,
     globalSearch, parameterizedSearch,
     describeGlobal, describeSObject, composite, getRecord,
     getDebugLogs, getDebugLogBody, executeAnonymous, getCurrentUser, getLimits,

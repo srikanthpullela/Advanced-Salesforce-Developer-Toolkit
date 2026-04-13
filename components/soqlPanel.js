@@ -50,10 +50,13 @@ const SOQLPanel = (() => {
             <button class="sfdt-btn sfdt-btn-sm soql-tab active" data-tab="editor">Editor</button>
             <button class="sfdt-btn sfdt-btn-sm soql-tab" data-tab="databuilder">Data Builder</button>
             <button class="sfdt-btn sfdt-btn-sm soql-tab" data-tab="examples">Examples</button>
-            <button class="sfdt-btn sfdt-btn-sm soql-tab" data-tab="history">History</button>
+            <div class="sfdt-history-hover-wrap" id="soql-history-wrap">
+              <button class="sfdt-btn sfdt-btn-sm" id="soql-history-btn">History</button>
+              <div class="sfdt-history-dropdown" id="soql-history-dropdown"></div>
+            </div>
             <button class="sfdt-btn sfdt-btn-sm soql-tab" data-tab="favorites">Favorites</button>
             <span class="sfdt-soql-divider">|</span>
-            <button class="sfdt-btn sfdt-btn-sm" id="soql-newtab" title="Open in new tab">${I.maximize} New Tab</button>
+            <button class="sfdt-btn sfdt-btn-sm" id="soql-newtab" title="Run query in browser via REST API">${I.maximize} Query API</button>
             <button class="sfdt-btn sfdt-btn-sm" id="soql-resize" title="Toggle size">${I.maximize}</button>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="soql-close" title="Close panel">${I.x} Close</button>
           </div>
@@ -76,6 +79,10 @@ const SOQLPanel = (() => {
               <button class="sfdt-btn" id="soql-csv" title="Export CSV" disabled>CSV</button>
               <button class="sfdt-btn" id="soql-json" title="Export JSON" disabled>JSON</button>
               <button class="sfdt-btn" id="soql-clipboard" title="Copy to clipboard" disabled>${I.copy} Copy</button>
+            </div>
+            <div class="sfdt-field-hints" id="soql-field-hints">
+              <div class="sfdt-field-hints-title" id="soql-field-hints-title">Available Fields</div>
+              <div class="sfdt-field-hints-list" id="soql-field-hints-list"></div>
             </div>
             <div class="sfdt-soql-hints" id="soql-hints"></div>
           </div>
@@ -128,10 +135,120 @@ const SOQLPanel = (() => {
 
     _editor.addEventListener('keydown', _onEditorKeyDown);
     _editor.addEventListener('input', _onEditorInput);
+
+    // Click outside field hints to close them
+    _container.addEventListener('click', (e) => {
+      const hintsPanel = _container.querySelector('#soql-field-hints');
+      if (hintsPanel && hintsPanel.classList.contains('visible') && !hintsPanel.contains(e.target)) {
+        _hideFieldHints();
+      }
+    });
+
+    // History hover dropdown
+    _initHistoryHoverDropdown();
+  }
+
+  let _historyDropdownTimeout = null;
+
+  function _initHistoryHoverDropdown() {
+    const wrap = _container.querySelector('#soql-history-wrap');
+    const dropdown = _container.querySelector('#soql-history-dropdown');
+
+    wrap.addEventListener('mouseenter', () => {
+      clearTimeout(_historyDropdownTimeout);
+      _renderHistoryDropdown();
+      dropdown.style.display = 'block';
+    });
+
+    wrap.addEventListener('mouseleave', () => {
+      _historyDropdownTimeout = setTimeout(() => {
+        dropdown.style.display = 'none';
+      }, 300);
+    });
+
+    dropdown.addEventListener('mouseenter', () => {
+      clearTimeout(_historyDropdownTimeout);
+    });
+
+    dropdown.addEventListener('mouseleave', () => {
+      _historyDropdownTimeout = setTimeout(() => {
+        dropdown.style.display = 'none';
+      }, 300);
+    });
+  }
+
+  function _renderHistoryDropdown() {
+    const dropdown = _container.querySelector('#soql-history-dropdown');
+    const history = QS().getHistory();
+    const I = ICONS();
+
+    if (history.length === 0) {
+      dropdown.innerHTML = '<div style="padding:20px;text-align:center;color:#7f849c;font-size:12px">No query history yet.<br>Run a query and it will appear here.</div>';
+      return;
+    }
+
+    dropdown.innerHTML = `
+      <div class="sfdt-hd-header">
+        <span style="font-weight:600;color:#89b4fa;font-size:12px">Query History (${history.length})</span>
+        <button class="sfdt-btn sfdt-btn-sm" id="soql-hd-clear">${I.x} Clear</button>
+      </div>
+      <div class="sfdt-hd-list">
+        ${history.slice(0, 30).map((h, i) => `
+          <div class="sfdt-hd-item" data-index="${i}">
+            <div class="sfdt-hd-item-main">
+              <span class="sfdt-hd-status" style="color:${h.success ? '#a6e3a1' : '#f38ba8'}">${h.success ? '✓' : '✕'}</span>
+              <pre class="sfdt-hd-query">${_esc(h.query)}</pre>
+            </div>
+            <div class="sfdt-hd-item-meta">
+              <span>${h.resultCount || 0} records</span>
+              <span>${h.executionTime}ms</span>
+              <span>${_formatTime(h.timestamp)}</span>
+              <button class="sfdt-btn sfdt-btn-sm sfdt-hd-remove" data-index="${i}" title="Remove">${I.x}</button>
+            </div>
+          </div>
+        `).join('')}
+        ${history.length > 30 ? `<div style="padding:8px 12px;text-align:center;color:#585b70;font-size:11px">+${history.length - 30} more — open History tab to see all</div>` : ''}
+      </div>
+    `;
+
+    // Clear all
+    dropdown.querySelector('#soql-hd-clear')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      QS().clearHistory();
+      _renderHistoryDropdown();
+    });
+
+    // Click item to load query
+    dropdown.querySelectorAll('.sfdt-hd-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.index, 10);
+        _editor.value = history[idx].query;
+        _editor.focus();
+        dropdown.style.display = 'none';
+        // Switch to editor tab if not already
+        if (_activeTab !== 'editor') {
+          _container.querySelectorAll('.soql-tab').forEach(t => t.classList.remove('active'));
+          _container.querySelector('[data-tab="editor"]').classList.add('active');
+          _switchTab('editor');
+        }
+        _statusBar.textContent = `Loaded query from history`;
+      });
+    });
+
+    // Remove individual item
+    dropdown.querySelectorAll('.sfdt-hd-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.index, 10);
+        QS().removeHistoryItem(idx);
+        _renderHistoryDropdown();
+      });
+    });
   }
 
   function _switchTab(tab) {
     _activeTab = tab;
+    _container.querySelectorAll('.soql-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     _container.querySelector('#soql-editor-area').style.display = tab === 'editor' ? '' : 'none';
     _resultsContainer.style.display = tab === 'editor' ? '' : 'none';
     _container.querySelector('#soql-history-area').style.display = tab === 'history' ? '' : 'none';
@@ -147,13 +264,13 @@ const SOQLPanel = (() => {
   function _openInNewTab() {
     const soql = _editor.value.trim();
     const instanceUrl = window.SalesforceAPI.getInstanceUrl();
-    // Open Developer Console or a query page
     if (soql) {
-      // Build a QueryEditor URL with the query pre-filled
-      const queryUrl = `${instanceUrl}/_ui/common/apex/debug/ApexCSIPage`;
+      // Open Salesforce Query Editor with query pre-filled via the REST Explorer
+      const encoded = encodeURIComponent(soql);
+      const queryUrl = `${instanceUrl}/services/data/${window.SalesforceAPI.API_VERSION}/query?q=${encoded}`;
       window.open(queryUrl, '_blank');
     } else {
-      window.open(`${instanceUrl}/_ui/common/apex/debug/ApexCSIPage`, '_blank');
+      window.open(`${instanceUrl}/_ui/search/ui/UnifiedSearchResults`, '_blank');
     }
   }
 
@@ -173,6 +290,9 @@ const SOQLPanel = (() => {
       if (e.key === 'Escape') { e.preventDefault(); _hideAutocomplete(); return; }
     }
 
+    // Escape also closes field hints
+    if (e.key === 'Escape') { _hideFieldHints(); }
+
     if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       const start = _editor.selectionStart;
@@ -181,12 +301,83 @@ const SOQLPanel = (() => {
     }
   }
 
-  function _onEditorInput() { _showAutocomplete(); }
+  function _onEditorInput() { _showAutocomplete(); _showFieldHintsIfNeeded(); }
+
+  let _fieldHintsCache = {};
+
+  async function _showFieldHintsIfNeeded() {
+    const text = _editor.value;
+    const cursor = _editor.selectionStart;
+    const beforeCursor = text.substring(0, cursor);
+    const objectMatch = text.match(/FROM\s+(\w+)/i);
+    if (!objectMatch) { _hideFieldHints(); return; }
+
+    // Check if cursor is in SELECT clause (before FROM) and last non-space char is comma
+    const fromIdx = text.search(/\bFROM\b/i);
+    if (fromIdx >= 0 && cursor > fromIdx) { _hideFieldHints(); return; }
+
+    const trimmed = beforeCursor.replace(/\s+$/, '');
+    // Show field hints after comma, or after SELECT keyword
+    const afterComma = /,\s*$/.test(beforeCursor) || /\bSELECT\s+$/i.test(beforeCursor);
+    if (!afterComma) { _hideFieldHints(); return; }
+
+    const objName = objectMatch[1];
+    const hintsPanel = _container.querySelector('#soql-field-hints');
+    const hintsList = _container.querySelector('#soql-field-hints-list');
+    const hintsTitle = _container.querySelector('#soql-field-hints-title');
+
+    // Show loading state while fetching fields
+    if (!_fieldHintsCache[objName]) {
+      hintsTitle.textContent = `Loading ${objName} fields...`;
+      hintsList.innerHTML = '<span class="sfdt-field-chip" style="color:var(--fg3);border:none;cursor:default;animation:sfdt-pulse 1.2s infinite">⏳ Fetching field list...</span>';
+      hintsPanel.classList.add('visible');
+      _fieldHintsCache[objName] = await QS().getFieldSuggestions(objName);
+    }
+    const fields = _fieldHintsCache[objName];
+    if (!fields || fields.length === 0) { _hideFieldHints(); return; }
+
+    // Parse already-selected fields from the SELECT clause
+    const selectPart = text.substring(0, fromIdx);
+    const selectedFields = selectPart.replace(/^SELECT\s+/i, '').split(',').map(f => f.trim().toLowerCase()).filter(Boolean);
+
+    // Filter out already selected fields
+    const remaining = fields.filter(f => !selectedFields.includes(f.name.toLowerCase()));
+
+    hintsTitle.textContent = `${objName} Fields (${remaining.length} available)`;
+    hintsList.innerHTML = remaining.slice(0, 80).map(f =>
+      `<span class="sfdt-field-chip" data-field="${_esc(f.name)}" title="${_esc(f.label || f.name)} (${f.type})">${_esc(f.name)}<span class="sfdt-field-chip-type">${_esc(f.type)}</span></span>`
+    ).join('');
+    hintsPanel.classList.add('visible');
+
+    // Click field chip to insert
+    hintsList.querySelectorAll('.sfdt-field-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const fieldName = chip.dataset.field;
+        const cursorPos = _editor.selectionStart;
+        const before = _editor.value.substring(0, cursorPos);
+        const after = _editor.value.substring(cursorPos);
+        // Add space if needed
+        const needsSpace = before.length > 0 && !before.endsWith(' ') && !before.endsWith(',');
+        const insert = (needsSpace ? ' ' : '') + fieldName;
+        _editor.value = before + insert + after;
+        _editor.selectionStart = _editor.selectionEnd = cursorPos + insert.length;
+        _editor.focus();
+        _showFieldHintsIfNeeded();
+      });
+    });
+  }
+
+  function _hideFieldHints() {
+    const hintsPanel = _container.querySelector('#soql-field-hints');
+    if (hintsPanel) hintsPanel.classList.remove('visible');
+  }
 
   async function _showAutocomplete() {
     const text = _editor.value;
     const cursor = _editor.selectionStart;
     const beforeCursor = text.substring(0, cursor);
+
+    // Match the current word being typed — could be after comma+space
     const wordMatch = beforeCursor.match(/(\w+)$/);
     const currentWord = wordMatch ? wordMatch[1] : '';
 
@@ -201,17 +392,25 @@ const SOQLPanel = (() => {
     } else {
       const objectMatch = text.match(/FROM\s+(\w+)/i);
       if (objectMatch) {
+        // Check if we're in the SELECT clause (before FROM keyword)
+        const fromIdx = text.search(/\bFROM\b/i);
+        const inSelectClause = fromIdx < 0 || cursor <= fromIdx;
+
         const fieldSuggestions = await QS().getFieldSuggestions(objectMatch[1]);
         suggestions = fieldSuggestions
           .filter(f => f.name.toLowerCase().includes(currentWord.toLowerCase()))
           .slice(0, 15)
           .map(f => ({ text: f.name, label: `${f.name} (${f.type})`, type: 'field' }));
       }
-      const kwSuggestions = QS().getKeywordSuggestions()
-        .filter(k => k.toLowerCase().startsWith(currentWord.toLowerCase()))
-        .slice(0, 5)
-        .map(k => ({ text: k, label: k, type: 'keyword' }));
-      suggestions = [...suggestions, ...kwSuggestions];
+      // Only add keyword suggestions when not clearly typing a field name after comma
+      const afterComma = /,\s*\w*$/.test(beforeCursor);
+      if (!afterComma) {
+        const kwSuggestions = QS().getKeywordSuggestions()
+          .filter(k => k.toLowerCase().startsWith(currentWord.toLowerCase()))
+          .slice(0, 5)
+          .map(k => ({ text: k, label: k, type: 'keyword' }));
+        suggestions = [...suggestions, ...kwSuggestions];
+      }
     }
 
     if (suggestions.length === 0) { _hideAutocomplete(); return; }
@@ -499,8 +698,15 @@ const SOQLPanel = (() => {
   function _analyzeQuery() {
     const soql = _editor.value.trim();
     if (!soql) return;
-    const plan = QS().getQueryPlan(soql);
     const hints = _container.querySelector('#soql-hints');
+
+    // Toggle: if hints are already visible, hide them
+    if (hints.innerHTML.trim() !== '') {
+      hints.innerHTML = '';
+      return;
+    }
+
+    const plan = QS().getQueryPlan(soql);
 
     if (plan.hints.length === 0) {
       hints.innerHTML = '<div class="sfdt-hint sfdt-hint-success" style="color:#a6e3a1">Query looks good!</div>';
@@ -658,9 +864,9 @@ const SOQLPanel = (() => {
         <button class="sfdt-btn sfdt-btn-sm" id="soql-clear-history">${I.x} Clear All</button>
       </div>
       ${history.slice(0, 50).map((h, i) => `
-        <div class="sfdt-soql-history-item ${h.success ? '' : 'error-item'}">
+        <div class="sfdt-soql-history-item ${h.success ? '' : 'error-item'}" data-query-index="${i}">
           <div class="sfdt-soql-history-query">
-            <pre style="color:#cdd6f4">${_esc(h.query)}</pre>
+            <pre style="color:#cdd6f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${_esc(h.query.length > 80 ? h.query.substring(0, 80) + '...' : h.query)}</pre>
             <div class="sfdt-soql-history-meta">
               <span style="color:${h.success ? '#a6e3a1' : '#f38ba8'}">${h.success ? 'OK' : 'ERR'}</span>
               <span>${h.resultCount || 0} records</span>
@@ -671,7 +877,36 @@ const SOQLPanel = (() => {
           <button class="sfdt-btn sfdt-btn-sm sfdt-btn-primary history-load" data-index="${i}">${I.play}</button>
         </div>
       `).join('')}
+      <div class="sfdt-history-tooltip" id="soql-history-tooltip" style="display:none"></div>
     `;
+
+    // Custom tooltip on hover
+    const tooltip = area.querySelector('#soql-history-tooltip');
+    let tooltipTimeout = null;
+    area.querySelectorAll('.sfdt-soql-history-item[data-query-index]').forEach(item => {
+      item.addEventListener('mouseenter', (e) => {
+        const idx = parseInt(item.dataset.queryIndex, 10);
+        const query = history[idx]?.query;
+        if (!query) return;
+        clearTimeout(tooltipTimeout);
+        tooltip.innerHTML = `<pre style="margin:0;font-family:var(--mono);font-size:12px;color:#cdd6f4;white-space:pre-wrap;word-break:break-all">${_esc(query)}</pre>`;
+        tooltip.style.display = 'block';
+        // Position near the item
+        const itemRect = item.getBoundingClientRect();
+        const areaRect = area.getBoundingClientRect();
+        tooltip.style.top = (itemRect.top - areaRect.top - tooltip.offsetHeight - 4) + 'px';
+        // If tooltip goes above viewport, show below instead
+        if (itemRect.top - tooltip.offsetHeight - 4 < areaRect.top) {
+          tooltip.style.top = (itemRect.bottom - areaRect.top + 4) + 'px';
+        }
+      });
+      item.addEventListener('mouseleave', () => {
+        tooltipTimeout = setTimeout(() => { tooltip.style.display = 'none'; }, 200);
+      });
+    });
+    // Keep tooltip visible when hovering over it
+    tooltip.addEventListener('mouseenter', () => { clearTimeout(tooltipTimeout); });
+    tooltip.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
     area.querySelector('#soql-clear-history')?.addEventListener('click', () => {
       QS().clearHistory();
@@ -873,7 +1108,7 @@ const SOQLPanel = (() => {
 
     // Re-render the modal with full form
     modal.innerHTML = `
-      <div class="sfdt-crud-modal">
+       <div class="sfdt-crud-modal" style="padding:10px !important">
         <div class="sfdt-crud-header">
           <span class="sfdt-crud-title">${title}</span>
           <span style="font-size:11px;color:#7f849c;margin-left:8px">${allFields.length} fields${allFields.filter(f => !f.nillable && !f.defaultedOnCreate).length > 0 ? ' · <span style="color:#f38ba8">* = required</span>' : ''}</span>
@@ -998,6 +1233,7 @@ const SOQLPanel = (() => {
 
   function show() {
     _create();
+    _switchTab('editor');
     _panel.classList.add('visible');
     _visible = true;
     requestAnimationFrame(() => _editor.focus());

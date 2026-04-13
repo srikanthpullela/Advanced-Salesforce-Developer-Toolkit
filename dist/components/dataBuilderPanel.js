@@ -56,14 +56,14 @@ const DataBuilderPanel = (() => {
       color: '#94e2d5'
     },
     constraint_rule: {
-      label: 'Constraint Rule', icon: '\uD83D\uDEE1\uFE0F', object: `${NS}ProductConstraintRule__c`,
+      label: 'Constraint Rule', icon: '\uD83D\uDEE1\uFE0F', object: `${NS}ConstraintRule__c`,
       defaults: { [`${NS}Active__c`]: 'true' },
       allowedChildren: ['constraint_rule_entry'],
       description: 'Product constraint rule',
       color: '#f38ba8'
     },
     constraint_rule_entry: {
-      label: 'Rule Entry', icon: '\u2192', object: `${NS}ProductConstraintRuleEntry__c`,
+      label: 'Rule Entry', icon: '\u2192', object: `${NS}ConstraintRuleEntry__c`,
       defaults: {},
       parentField: `${NS}ConstraintRuleId__c`,
       allowedChildren: [],
@@ -362,6 +362,83 @@ const DataBuilderPanel = (() => {
   }
   function getRecipeNames() { return Object.keys(_getRecipes()); }
 
+  // ─── Quick-start Templates ────────────────────────────
+
+  const TEMPLATES = {
+    bundle_with_options: {
+      label: 'Bundle + Options',
+      icon: '\uD83D\uDCE6',
+      desc: 'Bundle \u2192 Option Group \u2192 2 Options with Prices',
+      build: function() {
+        var b = addNode('bundle'); if (!b) return;
+        b.expanded = true; b.fields.Name = 'My Bundle';
+        var og = addNode('option_group', b.id); if (!og) return;
+        og.expanded = true;
+        var o1 = addNode('option', og.id); if (o1) { o1.fields.Name = 'Option 1'; o1.expanded = false; addNode('pricebook_entry', o1.id); }
+        var o2 = addNode('option', og.id); if (o2) { o2.fields.Name = 'Option 2'; o2.expanded = false; addNode('pricebook_entry', o2.id); }
+        addNode('pricebook_entry', b.id);
+      }
+    },
+    bundle_with_attrs: {
+      label: 'Bundle + Attributes',
+      icon: '\uD83C\uDFF7\uFE0F',
+      desc: 'Bundle with 2 Attribute Values',
+      build: function() {
+        var b = addNode('bundle'); if (!b) return;
+        b.expanded = true; b.fields.Name = 'My Bundle';
+        addNode('attribute', b.id);
+        addNode('attribute', b.id);
+        addNode('pricebook_entry', b.id);
+      }
+    },
+    constraint_rule_full: {
+      label: 'Constraint Rule',
+      icon: '\uD83D\uDEE1\uFE0F',
+      desc: 'Rule with 2 Entries',
+      build: function() {
+        var cr = addNode('constraint_rule'); if (!cr) return;
+        cr.expanded = true;
+        addNode('constraint_rule_entry', cr.id);
+        addNode('constraint_rule_entry', cr.id);
+      }
+    }
+  };
+
+  function _applyTemplate(key) {
+    var tpl = TEMPLATES[key];
+    if (tpl && tpl.build) tpl.build();
+  }
+
+  // ─── Duplicate node ───────────────────────────────────
+
+  function duplicateNode(nodeId) {
+    var original = _findNode(nodeId);
+    if (!original) return null;
+    var parent = _findParent(nodeId);
+    var list = parent ? parent.children : _tree;
+    var clone = _deepCloneNode(original, original.parentId);
+    // Insert right after the original
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) { if (list[i].id === nodeId) { idx = i; break; } }
+    if (idx >= 0) list.splice(idx + 1, 0, clone);
+    else list.push(clone);
+    return clone;
+  }
+
+  function _deepCloneNode(src, parentId) {
+    var node = _newNode(src.type, parentId);
+    node.object = src.object;
+    node.fields = Object.assign({}, src.fields);
+    node.linkFields = src.linkFields ? Object.assign({}, src.linkFields) : null;
+    node.useExistingId = src.useExistingId;
+    node.expanded = src.expanded;
+    node.describe = src.describe;
+    for (var i = 0; i < src.children.length; i++) {
+      node.children.push(_deepCloneNode(src.children[i], node.id));
+    }
+    return node;
+  }
+
   // ═══════════════════════════════════════════════════════
   //  UI Rendering
   // ═══════════════════════════════════════════════════════
@@ -430,7 +507,7 @@ const DataBuilderPanel = (() => {
   }
 
   function _renderEmpty() {
-    return '<div class="sfdt-db-empty">'
+    var h = '<div class="sfdt-db-empty">'
       + '<div class="sfdt-db-empty-ico">'
       + '<svg width="48" height="48" viewBox="0 0 48 48" fill="none">'
       + '<rect x="4" y="4" width="16" height="12" rx="3" stroke="#585b70" stroke-width="1.4"/>'
@@ -439,9 +516,27 @@ const DataBuilderPanel = (() => {
       + '<path d="M12 16v6h12m12-6v6h-12m0 0v10" stroke="#585b70" stroke-width="1.2" stroke-linecap="round"/>'
       + '</svg></div>'
       + '<div class="sfdt-db-empty-h">Build a CPQ product hierarchy</div>'
-      + '<div class="sfdt-db-empty-p">Start with a Bundle below, then add Option Groups, Options, Attributes and Prices as children.</div>'
+      + '<div class="sfdt-db-empty-p">Start from a template or add individual nodes below.</div>'
       + '<div class="sfdt-db-empty-tip">Parent-child links are <b>auto-wired</b> at execution time.</div>'
       + '</div>';
+
+    // Templates
+    h += '<div class="sfdt-db-templates">';
+    h += '<div class="sfdt-db-root-label">Quick Start</div>';
+    h += '<div class="sfdt-db-tpl-grid">';
+    var tplKeys = Object.keys(TEMPLATES);
+    for (var ti = 0; ti < tplKeys.length; ti++) {
+      var tpl = TEMPLATES[tplKeys[ti]];
+      h += '<button class="sfdt-db-tpl-btn sfdt-db-apply-template" data-tpl="' + tplKeys[ti] + '">'
+        + '<span class="sfdt-db-tpl-icon">' + tpl.icon + '</span>'
+        + '<span class="sfdt-db-tpl-info">'
+        + '<span class="sfdt-db-tpl-name">' + _esc(tpl.label) + '</span>'
+        + '<span class="sfdt-db-tpl-desc">' + _esc(tpl.desc) + '</span>'
+        + '</span></button>';
+    }
+    h += '</div></div>';
+
+    return h;
   }
 
   // ─── Tree node with connector lines ────────────────────
@@ -532,6 +627,7 @@ const DataBuilderPanel = (() => {
       }
       h += '</span></span>';
     }
+    h += '<button class="sfdt-db-node-tb sfdt-db-dup-node" data-id="' + node.id + '" title="Duplicate">\u2398</button>';
     h += '<button class="sfdt-db-node-tb sfdt-db-move-node" data-id="' + node.id + '" data-dir="-1" title="Move up">\u25B2</button>';
     h += '<button class="sfdt-db-node-tb sfdt-db-move-node" data-id="' + node.id + '" data-dir="1" title="Move down">\u25BC</button>';
     h += '<button class="sfdt-db-node-tb sfdt-db-node-rm sfdt-db-remove-node" data-id="' + node.id + '" title="Remove">\u2715</button>';
@@ -592,20 +688,12 @@ const DataBuilderPanel = (() => {
     var def = NODE_TYPES[node.type] || NODE_TYPES.custom;
     var h = '<div class="sfdt-db-node-bd">';
 
-    // Object row
-    if (node.type === 'custom') {
-      h += '<div class="sfdt-db-row">'
-        + '<label class="sfdt-db-lbl">Object</label>'
-        + '<input type="text" class="sfdt-db-inp sfdt-db-obj-input" data-id="' + node.id + '" value="' + _esc(node.object) + '" placeholder="e.g. Product2" spellcheck="false"/>'
-        + '<button class="sfdt-db-loadbtn sfdt-db-load-fields" data-id="' + node.id + '">Load Fields</button>'
-        + '</div>';
-    } else {
-      h += '<div class="sfdt-db-row">'
-        + '<label class="sfdt-db-lbl">Object</label>'
-        + '<span class="sfdt-db-obj-ro">' + _esc(node.object) + '</span>'
-        + '<button class="sfdt-db-loadbtn sfdt-db-load-fields" data-id="' + node.id + '">Load Fields</button>'
-        + '</div>';
-    }
+    // Object row — always editable so users can change the object for their org
+    h += '<div class="sfdt-db-row">'
+      + '<label class="sfdt-db-lbl">Object</label>'
+      + '<input type="text" class="sfdt-db-inp sfdt-db-obj-input" data-id="' + node.id + '" value="' + _esc(node.object) + '" placeholder="e.g. Apttus_Config2__ConstraintRule__c" spellcheck="false"/>'
+      + '<button class="sfdt-db-loadbtn sfdt-db-load-fields" data-id="' + node.id + '">Load Fields</button>'
+      + '</div>';
 
     // Fields
     if (flds.length > 0) {
@@ -670,6 +758,14 @@ const DataBuilderPanel = (() => {
   // ─── Event Handlers ───────────────────────────────────
 
   function _attachListeners(container) {
+    // Template buttons
+    container.querySelectorAll('.sfdt-db-apply-template').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        _applyTemplate(btn.dataset.tpl);
+        _reRender(container);
+      });
+    });
+
     // Root add
     container.querySelectorAll('.sfdt-db-add-root').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -748,12 +844,15 @@ const DataBuilderPanel = (() => {
       });
     });
 
-    // Remove / Move
+    // Remove / Move / Duplicate
     container.querySelectorAll('.sfdt-db-remove-node').forEach(function(btn) {
       btn.addEventListener('click', function(e) { e.stopPropagation(); removeNode(btn.dataset.id); _reRender(container); });
     });
     container.querySelectorAll('.sfdt-db-move-node').forEach(function(btn) {
       btn.addEventListener('click', function(e) { e.stopPropagation(); moveNode(btn.dataset.id, parseInt(btn.dataset.dir)); _reRender(container); });
+    });
+    container.querySelectorAll('.sfdt-db-dup-node').forEach(function(btn) {
+      btn.addEventListener('click', function(e) { e.stopPropagation(); duplicateNode(btn.dataset.id); _reRender(container); });
     });
 
     // Object input
@@ -830,8 +929,9 @@ const DataBuilderPanel = (() => {
 
   return {
     render: render, addNode: addNode, removeNode: removeNode, moveNode: moveNode,
-    executeAll: executeAll, saveRecipe: saveRecipe, loadRecipe: loadRecipe, deleteRecipe: deleteRecipe,
-    getRecipeNames: getRecipeNames,
+    duplicateNode: duplicateNode, executeAll: executeAll,
+    saveRecipe: saveRecipe, loadRecipe: loadRecipe, deleteRecipe: deleteRecipe,
+    getRecipeNames: getRecipeNames, TEMPLATES: TEMPLATES,
     getTree: function() { return _tree; }, getResults: function() { return _results; },
     isRunning: function() { return _running; }, NODE_TYPES: NODE_TYPES
   };

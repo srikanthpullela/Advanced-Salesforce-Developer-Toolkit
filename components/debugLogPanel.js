@@ -66,12 +66,12 @@ const DebugLogPanel = (() => {
                 </select>
               </div>
               <div class="sfdt-dl-tabs">
+                <button class="sfdt-dl-tab" id="dl-tab-raw" title="Raw log lines with search and filter">\uD83D\uDCC4 Raw</button>
                 <button class="sfdt-dl-tab" id="dl-tab-summary" title="Overview with stats, limits, and top issues">\uD83D\uDCCA Summary</button>
                 <button class="sfdt-dl-tab" id="dl-tab-timeline" title="Flame chart showing execution spans">\uD83D\uDD25 Flame Chart</button>
                 <button class="sfdt-dl-tab" id="dl-tab-calltree" title="Expandable call stack with self/total time">\uD83C\uDF33 Call Tree</button>
                 <button class="sfdt-dl-tab" id="dl-tab-analysis" title="Aggregated method metrics">\uD83E\uDDE0 Analysis</button>
                 <button class="sfdt-dl-tab" id="dl-tab-database" title="SOQL and DML insights">\uD83D\uDCBE Database</button>
-                <button class="sfdt-dl-tab" id="dl-tab-raw" title="Raw log lines with color coding">\uD83D\uDCC4 Raw</button>
                 <button class="sfdt-btn sfdt-btn-sm" id="dl-download" title="Download log">${I.download}</button>
               </div>
             </div>
@@ -80,7 +80,7 @@ const DebugLogPanel = (() => {
                 <div style="font-size:28px;margin-bottom:12px;opacity:0.4">${I.terminal}</div>
                 <div style="font-size:13px;font-weight:600;color:#cdd6f4;margin-bottom:6px">Debug Log Analyzer</div>
                 <div style="font-size:12px;color:#7f849c;line-height:1.6">Select a log from the list to analyze.<br>
-                Views: <b style="color:#89b4fa">Summary</b> \u00B7 <b style="color:#f38ba8">Flame Chart</b> \u00B7 <b style="color:#a6e3a1">Call Tree</b> \u00B7 <b style="color:#f9e2af">Analysis</b> \u00B7 <b style="color:#cba6f7">Database</b> \u00B7 Raw</div>
+                Views: <b style="color:#cdd6f4">Raw</b> \u00B7 <b style="color:#89b4fa">Summary</b> \u00B7 <b style="color:#f38ba8">Flame Chart</b> \u00B7 <b style="color:#a6e3a1">Call Tree</b> \u00B7 <b style="color:#f9e2af">Analysis</b> \u00B7 <b style="color:#cba6f7">Database</b></div>
               </div>
             </div>
           </div>
@@ -121,7 +121,10 @@ const DebugLogPanel = (() => {
       _container.querySelector('#dl-count').textContent = `${logs.length} logs`;
 
       if (logs.length === 0) {
-        listBody.innerHTML = '<div style="padding:16px;text-align:center;color:#7f849c;font-size:12px">No debug logs found.<br>Enable debug logging in Setup first.</div>';
+        listBody.innerHTML = '<div style="padding:16px;text-align:center;color:#7f849c;font-size:12px">'
+          + 'No debug logs found (ApexLog records).<br>'
+          + '<span style="font-size:11px;color:#585b70;line-height:1.6">Trace flags exist but no Apex has been executed yet.<br>'
+          + 'Run some Apex code or trigger an action, then click <b style="color:#89b4fa">Refresh</b>.</span></div>';
         return;
       }
 
@@ -130,6 +133,7 @@ const DebugLogPanel = (() => {
         const duration = log.DurationMilliseconds;
         const size = _formatBytes(log.LogLength);
         const op = (log.Operation || '').replace(/^\//, '').substring(0, 35);
+        const userName = log.LogUser ? log.LogUser.Name : '';
         const status = log.Status || '';
         const isError = status.toLowerCase().includes('error') || status.toLowerCase().includes('fatal');
         const durationColor = duration > 5000 ? '#f38ba8' : duration > 2000 ? '#f9e2af' : '#a6e3a1';
@@ -141,6 +145,7 @@ const DebugLogPanel = (() => {
           </div>
           <div class="sfdt-debuglog-item-op" title="${_esc(log.Operation || '')}">${_esc(op || 'Unknown')}</div>
           <div class="sfdt-debuglog-item-meta">
+            ${userName ? `<span style="color:#cba6f7">${_esc(userName)}</span>` : ''}
             <span>${_esc(log.Request || '')}</span>
             <span>${size}</span>
             ${isError ? '<span style="color:#f38ba8">ERROR</span>' : ''}
@@ -176,7 +181,7 @@ const DebugLogPanel = (() => {
     try {
       _rawLog = await API().getDebugLogBody(logId);
       _parsedLog = _parseLog(_rawLog);
-      _showTab('summary');
+      _showTab('raw');
     } catch (err) {
       detailBody.innerHTML = `<div class="sfdt-error" style="padding:16px">Error loading log: ${_esc(err.message)}</div>`;
     }

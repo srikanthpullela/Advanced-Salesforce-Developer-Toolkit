@@ -6,7 +6,7 @@
 // Listen for keyboard commands defined in manifest.json
 chrome.commands.onCommand.addListener((command, tab) => {
   if (!tab || !tab.id || !_isSalesforceTab(tab)) return;
-  chrome.tabs.sendMessage(tab.id, { action: command });
+  chrome.tabs.sendMessage(tab.id, { action: command }).catch(() => {});
 });
 
 // Listen for messages from popup or content scripts
@@ -77,7 +77,10 @@ chrome.runtime.onInstalled.addListener(() => {
     'https://*.salesforce.com/*',
     'https://*.force.com/*',
     'https://*.lightning.force.com/*',
-    'https://*.my.salesforce.com/*'
+    'https://*.my.salesforce.com/*',
+    'https://*.visual.force.com/*',
+    'https://*.visualforce.com/*',
+    'https://*.salesforce-setup.com/*'
   ];
 
   chrome.contextMenus.create({
@@ -100,21 +103,23 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ['page'],
     documentUrlPatterns: sfPatterns
   });
+});
 
-  chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (!tab || !tab.id) return;
-    switch (info.menuItemId) {
-      case 'sfdt-search':
-        chrome.tabs.sendMessage(tab.id, { action: 'open-search-palette', prefill: info.selectionText });
-        break;
-      case 'sfdt-inspect-record':
-        chrome.tabs.sendMessage(tab.id, { action: 'open-inspector' });
-        break;
-      case 'sfdt-soql':
-        chrome.tabs.sendMessage(tab.id, { action: 'open-soql' });
-        break;
-    }
-  });
+// Context menu click handler — must be at top level (not inside onInstalled)
+// so it survives service worker restarts.
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!tab || !tab.id) return;
+  switch (info.menuItemId) {
+    case 'sfdt-search':
+      chrome.tabs.sendMessage(tab.id, { action: 'open-search-palette', prefill: info.selectionText }).catch(() => {});
+      break;
+    case 'sfdt-inspect-record':
+      chrome.tabs.sendMessage(tab.id, { action: 'open-inspector' }).catch(() => {});
+      break;
+    case 'sfdt-soql':
+      chrome.tabs.sendMessage(tab.id, { action: 'open-soql' }).catch(() => {});
+      break;
+  }
 });
 
 // ─── Session Retrieval via chrome.cookies ────────────
@@ -231,10 +236,17 @@ async function _getActiveTabInfo() {
 }
 
 async function _broadcastToSalesforceTabs(message) {
-  const tabs = await chrome.tabs.query({});
+  const sfPatterns = [
+    'https://*.salesforce.com/*',
+    'https://*.force.com/*',
+    'https://*.lightning.force.com/*',
+    'https://*.my.salesforce.com/*',
+    'https://*.salesforce-setup.com/*',
+    'https://*.visual.force.com/*',
+    'https://*.visualforce.com/*'
+  ];
+  const tabs = await chrome.tabs.query({ url: sfPatterns });
   for (const tab of tabs) {
-    if (_isSalesforceTab(tab)) {
-      chrome.tabs.sendMessage(tab.id, message).catch(() => {});
-    }
+    chrome.tabs.sendMessage(tab.id, message).catch(() => {});
   }
 }

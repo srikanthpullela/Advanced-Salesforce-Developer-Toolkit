@@ -13,6 +13,13 @@ const MetadataService = (() => {
   let _indexReady = false;
   let _metadataIndex = {};
   const _listeners = [];
+  const INDEX_STORAGE_PREFIX = 'sfdt_idx_'; // per-org key: sfdt_idx_{orgId}
+  const INDEX_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+  function _indexStorageKey() {
+    const orgId = API.getOrgId() || 'default';
+    return `${INDEX_STORAGE_PREFIX}${orgId}`;
+  }
 
   // Auto-invalidate cache when extension changes
   (function _checkCacheVersion() {
@@ -23,6 +30,13 @@ const MetadataService = (() => {
         CACHE.clearNamespace('metadata');
         CACHE.clearNamespace('index');
         localStorage.setItem(CACHE_VERSION_KEY, CURRENT_CACHE_VERSION);
+        // Clear all per-org index caches
+        try {
+          chrome.storage.local.get(null, (items) => {
+            const keys = Object.keys(items || {}).filter(k => k.startsWith(INDEX_STORAGE_PREFIX));
+            if (keys.length) chrome.storage.local.remove(keys);
+          });
+        } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
   })();
@@ -36,6 +50,62 @@ const MetadataService = (() => {
     _indexReady = true;
     _listeners.forEach(fn => fn());
     _listeners.length = 0;
+  }
+
+  /**
+   * Save the full index to chrome.storage.local keyed by org ID.
+   * Each org gets its own cache — multiple orgs in different tabs work independently.
+   */
+  function _saveIndexToStorage(index) {
+    try {
+      const key = _indexStorageKey();
+      const payload = {
+        version: CURRENT_CACHE_VERSION,
+        ts: Date.now(),
+        data: index
+      };
+      chrome.storage.local.set({ [key]: payload }, () => {
+        if (chrome.runtime.lastError) {
+          console.debug('[SFDT] Failed to save index to storage:', chrome.runtime.lastError.message);
+        } else {
+          console.debug('[SFDT] Index saved to chrome.storage.local key:', key);
+        }
+      });
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Load the cached index from chrome.storage.local for the current org.
+   * Returns the index data if valid (same version, not expired), or null.
+   */
+  function _loadIndexFromStorage() {
+    return new Promise((resolve) => {
+      try {
+        const key = _indexStorageKey();
+        chrome.storage.local.get(key, (result) => {
+          if (chrome.runtime.lastError || !result || !result[key]) {
+            return resolve(null);
+          }
+          const entry = result[key];
+
+          // Validate: same cache version, not expired
+          if (entry.version !== CURRENT_CACHE_VERSION) {
+            console.debug('[SFDT] Cached index version mismatch, will rebuild.');
+            return resolve(null);
+          }
+          if (Date.now() - entry.ts > INDEX_CACHE_TTL) {
+            console.debug('[SFDT] Cached index expired, will rebuild.');
+            return resolve(null);
+          }
+
+          const count = Object.values(entry.data).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
+          console.log(`[SFDT] Loaded cached index for org (${key}): ${count} items (age: ${Math.round((Date.now() - entry.ts) / 1000)}s)`);
+          resolve(entry.data);
+        });
+      } catch {
+        resolve(null);
+      }
+    });
   }
 
   /**
@@ -407,6 +477,64 @@ const MetadataService = (() => {
       return _metadataIndex;
     }
 
+    // Try to load cached index from chrome.storage.local (instant, cross-domain)
+    const cachedIndex = await _loadIndexFromStorage();
+    if (cachedIndex) {
+      const count = Object.values(cachedIndex).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
+      if (count > 0) {
+        _metadataIndex = cachedIndex;
+        _indexReady = true;
+        _notifyReady();
+        console.log('[SFDT] Index ready from cache. Refreshing in background...');
+        // Refresh in background (non-blocking) so data stays fresh
+        _indexing = false;
+        _refreshIndexInBackground();
+        return _metadataIndex;
+      }
+    }
+
+    // No cached index — build from scratch
+    return await _buildIndexFresh();
+  }
+
+  /**
+   * Background refresh: re-fetches all metadata and updates the index silently.
+   * Doesn't block the UI — search works with cached data while this runs.
+   */
+  async function _refreshIndexInBackground() {
+    // Small delay to let the page finish loading first
+    await new Promise(r => setTimeout(r, 3000));
+
+    if (_indexing) return; // another build started
+    _indexing = true;
+
+    try {
+      // Verify session is still valid
+      await API.restGet('/limits/');
+    } catch (e) {
+      console.debug('[SFDT] Session invalid, skipping background refresh:', e.message);
+      _indexing = false;
+      return;
+    }
+
+    // Clear localStorage cache so fetchers hit the API for fresh data
+    CACHE.clearNamespace('metadata');
+
+    console.debug('[SFDT] Background index refresh started...');
+    const index = await _fetchAllMetadata();
+    if (index && Object.keys(index).length > 0) {
+      _metadataIndex = index;
+      _saveIndexToStorage(index);
+      const count = Object.values(index).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
+      console.log('[SFDT] Background index refresh complete:', count, 'items');
+    }
+    _indexing = false;
+  }
+
+  /**
+   * Build the index from scratch (no cache available).
+   */
+  async function _buildIndexFresh() {
     // Verify session with a lightweight call before firing parallel requests
     try {
       await API.restGet('/limits/');
@@ -416,6 +544,21 @@ const MetadataService = (() => {
       return _metadataIndex;
     }
 
+    const index = await _fetchAllMetadata();
+    _metadataIndex = index;
+
+    _indexing = false;
+    _notifyReady();
+    _saveIndexToStorage(index);
+    console.log('[SFDT] Index built with categories:', Object.keys(index).join(', '),
+      'Total items:', Object.values(index).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0));
+    return index;
+  }
+
+  /**
+   * Fetch all metadata from API in parallel batches and build the index object.
+   */
+  async function _fetchAllMetadata() {
     const index = {};
 
     // Fetch in parallel batches to stay within API limits
@@ -622,12 +765,39 @@ const MetadataService = (() => {
       console.debug('[SFDT] Index build error (batch 3):', e);
     }
 
-    _metadataIndex = index;
+    // Setup page shortcuts (always available, no API call needed)
+    index.setupPages = [
+      { name: 'Apex Classes', path: '/lightning/setup/ApexClasses/home', classicPath: '/setup/build/listApexClass.apexp' },
+      { name: 'Apex Triggers', path: '/lightning/setup/ApexTriggers/home', classicPath: '/setup/build/listApexTrigger.apexp' },
+      { name: 'Auth Providers', path: '/lightning/setup/AuthProvidersPage/home', classicPath: '/setup/secur/AuthProviderPage.apexp' },
+      { name: 'Connected Apps', path: '/lightning/setup/ConnectedApplication/home', classicPath: '/app/mgmt/forceconnectedapps/forceAppList.apexp' },
+      { name: 'Custom Labels', path: '/lightning/setup/ExternalStrings/home', classicPath: '/101?setupid=ExternalStrings' },
+      { name: 'Custom Metadata Types', path: '/lightning/setup/CustomMetadata/home', classicPath: '/setup/ui/listCustomMetadata.apexp' },
+      { name: 'Custom Settings', path: '/lightning/setup/CustomSettings/home', classicPath: '/setup/ui/listCustomSettings.apexp' },
+      { name: 'Data Loader', path: '/lightning/setup/DataManagementDataLoader/home', classicPath: '/ui/setup/dataimporter/DataImporterPage' },
+      { name: 'Debug Logs', path: '/lightning/setup/ApexDebugLogs/home', classicPath: '/setup/ui/listApexTraces.apexp' },
+      { name: 'Deployment Status', path: '/lightning/setup/DeployStatus/home', classicPath: '/changemgmt/monitorDeployment.apexp' },
+      { name: 'Developer Console', path: '/_ui/common/apex/debug/ApexCSIPage', classicPath: '/_ui/common/apex/debug/ApexCSIPage' },
+      { name: 'Email Templates', path: '/lightning/setup/CommunicationTemplatesEmail/home', classicPath: '/email/admin/listEmailTemplate.apexp' },
+      { name: 'Flows', path: '/lightning/setup/Flows/home', classicPath: '/300' },
+      { name: 'Installed Packages', path: '/lightning/setup/ImportedPackage/home', classicPath: '/0A3' },
+      { name: 'Lightning Components', path: '/lightning/setup/LightningComponentBundles/home', classicPath: '/setup/build/listLightningComponentBundle.apexp' },
+      { name: 'Named Credentials', path: '/lightning/setup/NamedCredential/home', classicPath: '/0XA' },
+      { name: 'Object Manager', path: '/lightning/setup/ObjectManager/home', classicPath: '/p/setup/custent/CustomObjectsPage?setupid=CustomObjects' },
+      { name: 'Permission Sets', path: '/lightning/setup/PermSets/home', classicPath: '/0PS' },
+      { name: 'Platform Events', path: '/lightning/setup/EventObjects/home', classicPath: '/setup/build/listEventObjects.apexp' },
+      { name: 'Profiles', path: '/lightning/setup/Profiles/home', classicPath: '/00e' },
+      { name: 'Remote Site Settings', path: '/lightning/setup/SecurityRemoteProxy/home', classicPath: '/0rp' },
+      { name: 'Scheduled Jobs', path: '/lightning/setup/ScheduledJobs/home', classicPath: '/08e' },
+      { name: 'Static Resources', path: '/lightning/setup/StaticResources/home', classicPath: '/setup/build/listStaticResource.apexp' },
+      { name: 'Tabs', path: '/lightning/setup/Tabs/home', classicPath: '/setup/ui/listTabs.apexp' },
+      { name: 'Users', path: '/lightning/setup/ManageUsers/home', classicPath: '/005' },
+      { name: 'Visualforce Pages', path: '/lightning/setup/ApexPages/home', classicPath: '/setup/build/listApexPage.apexp' }
+    ].map(s => ({
+      name: s.name, type: 'SetupPage', icon: '\u2699', label: s.name,
+      path: s.path, classicPath: s.classicPath
+    }));
 
-    _indexing = false;
-    _notifyReady();
-    console.log('[SFDT] Index built with categories:', Object.keys(index).join(', '),
-      'Total items:', Object.values(index).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0));
     return index;
   }
 
@@ -642,6 +812,7 @@ const MetadataService = (() => {
   function invalidateCache() {
     CACHE.clearNamespace('metadata');
     CACHE.clearNamespace('index');
+    try { chrome.storage.local.remove(_indexStorageKey()); } catch { /* ignore */ }
     _metadataIndex = {};
     _indexReady = false;
     _indexing = false;
@@ -712,6 +883,8 @@ const MetadataService = (() => {
         return `${base}/lightning/setup/Tabs/home`;
       case 'Attribute':
         return `${base}/lightning/r/Apttus_Config2__ProductAttribute__c/${item.id}/view`;
+      case 'SetupPage':
+        return `${base}${item.path}`;
       default:
         return `${base}/lightning/setup/SetupOneHome/home`;
     }
@@ -770,6 +943,8 @@ const MetadataService = (() => {
         return `${base}/setup/customize/tab/home`;
       case 'Attribute':
         return `${base}/${item.id}`;
+      case 'SetupPage':
+        return `${base}${item.classicPath}`;
       default:
         if (item.id) return `${base}/${item.id}`;
         return `${base}/setup/forcecomHomepage.apexp`;
