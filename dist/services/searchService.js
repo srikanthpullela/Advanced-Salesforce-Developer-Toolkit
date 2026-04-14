@@ -637,30 +637,13 @@ const SearchService = (() => {
       console.debug('[SFDT] Full SOSL search failed:', e1.message, '— retrying with standard objects only');
     }
 
-    // Attempt 2: Standard objects only
+    // Attempt 2: Standard objects only — single fallback to keep it fast
     try {
       const sosl2 = `FIND {${safeQuery}} IN NAME FIELDS RETURNING ${standardObjs.join(', ')}`;
       const response = await API.globalSearch(sosl2);
       return _parseSoslResults(response, maxResults);
     } catch (e2) {
-      console.debug('[SFDT] Standard SOSL search failed:', e2.message, '— retrying with minimal objects');
-    }
-
-    // Attempt 3: Minimal — just Account, Contact, Product2
-    try {
-      const sosl3 = `FIND {${safeQuery}} IN NAME FIELDS RETURNING Account(Id, Name), Contact(Id, Name), Product2(Id, Name, ProductCode)`;
-      const response = await API.globalSearch(sosl3);
-      return _parseSoslResults(response, maxResults);
-    } catch (e3) {
-      console.debug('[SFDT] Minimal SOSL search failed:', e3.message);
-    }
-
-    // Attempt 4: Use parameterized search as final fallback (searches everything, simpler API)
-    try {
-      const response = await API.parameterizedSearch(safeQuery);
-      return _parseSoslResults(response, maxResults);
-    } catch (e4) {
-      console.debug('[SFDT] Parameterized search also failed:', e4.message);
+      console.debug('[SFDT] Standard SOSL search also failed:', e2.message);
     }
 
     return [];

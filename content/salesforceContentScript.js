@@ -103,32 +103,34 @@
   // ─── Keyboard Shortcut Handler ────────────────────────
 
   function _handleKeyboard(e) {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+    if (!e.key) return;
+    const key = e.key.toUpperCase();
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'P') {
       e.preventDefault(); e.stopPropagation();
       PALETTE.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'X') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'X') {
       e.preventDefault(); e.stopPropagation();
       INSPECTOR.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Q') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Q') {
       e.preventDefault(); e.stopPropagation();
       SOQL.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'G') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'G') {
       e.preventDefault(); e.stopPropagation();
       NAVIGATOR.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'D') {
       e.preventDefault(); e.stopPropagation();
       DEBUGLOG.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'E') {
       e.preventDefault(); e.stopPropagation();
       EXECANON.toggle();
       return;

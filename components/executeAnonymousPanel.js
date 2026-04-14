@@ -95,7 +95,12 @@ const ExecuteAnonymousPanel = (() => {
     _container.querySelector('#ea-clear').addEventListener('click', () => { codeEl.value = ''; codeEl.focus(); });
     _container.querySelector('#ea-save').addEventListener('click', _saveSnippet);
     _container.querySelector('#ea-tab-debugs').addEventListener('click', _openDebugLogsPage);
-    _container.querySelector('#ea-resize').addEventListener('click', () => _panel.classList.toggle('expanded'));
+    _container.querySelector('#ea-resize').addEventListener('click', function() {
+      _panel.classList.toggle('expanded');
+      const I = ICONS();
+      this.innerHTML = _panel.classList.contains('expanded') ? I.minimize : I.maximize;
+      this.title = _panel.classList.contains('expanded') ? 'Restore Size' : 'Expand';
+    });
 
     // Initialize drag-to-resize
     SHADOW().initPanelResize(_panel, 'top', 'sfdt_execanon_height');

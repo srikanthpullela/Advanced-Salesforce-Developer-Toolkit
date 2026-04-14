@@ -955,7 +955,15 @@ const SOQLPanel = (() => {
     _container.querySelector('#soql-clipboard').disabled = !enabled;
   }
 
-  function _toggleSize() { _panel.classList.toggle('expanded'); }
+  function _toggleSize() {
+    _panel.classList.toggle('expanded');
+    const btn = _container.querySelector('#soql-resize');
+    if (btn) {
+      const I = ICONS();
+      btn.innerHTML = _panel.classList.contains('expanded') ? I.minimize : I.maximize;
+      btn.title = _panel.classList.contains('expanded') ? 'Restore Size' : 'Expand';
+    }
+  }
 
   // ─── CRUD Operations ────────────────────────────────
 

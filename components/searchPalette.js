@@ -30,6 +30,8 @@ const SearchPalette = (() => {
   let _activeFilter = null;
   let _pendingSearches = new Set();
   let _searchHistory = [];
+  let _deepSearchEnabled = false;
+  let _lastSearchQuery = null;
 
   const HISTORY_KEY = 'sfdt_search_history';
   const MAX_HISTORY = 30;
@@ -67,6 +69,8 @@ const SearchPalette = (() => {
           <div class="sfdt-header">
             <span class="sfdt-header-icon">${ICONS().search}</span>
             <input type="text" class="sfdt-input" placeholder="Search records, metadata, code, fields..." autocomplete="off" spellcheck="false" />
+            <button class="sfdt-search-btn" id="sfdt-search-btn" title="Search">${ICONS().sparkle || ICONS().search}<span class="sfdt-btn-label">Search</span></button>
+            <button class="sfdt-search-btn sfdt-deep-search-btn" id="sfdt-deep-search-btn" title="Deep Search — code, fields & all objects">${ICONS().search}<span class="sfdt-btn-label">Deep</span></button>
             <span class="sfdt-shortcut">ESC</span>
           </div>
           <div class="sfdt-filters"></div>
@@ -75,9 +79,10 @@ const SearchPalette = (() => {
             <span class="sfdt-searching-text">Searching...</span>
           </div>
           <div class="sfdt-results"></div>
+          <div class="sfdt-deep-search-slot" id="sfdt-deep-search-slot"></div>
           <div class="sfdt-status-bar">
-            <span class="sfdt-status-text">Type to search records, metadata, and code</span>
-            <span class="sfdt-status-hint">Enter to open · Shift+Enter for new tab</span>
+            <span class="sfdt-status-text">Type and press Enter to search</span>
+            <span class="sfdt-status-hint">Enter to search · Shift+Enter for new tab</span>
             <span class="sfdt-status-meta"></span>
             <button class="sfdt-btn sfdt-btn-sm" id="sfdt-rebuild-index" style="margin-left:auto">${ICONS().refresh} Rebuild Index</button>
           </div>
@@ -106,6 +111,22 @@ const SearchPalette = (() => {
     _container.querySelector('.sfdt-backdrop').addEventListener('click', hide);
     _input.addEventListener('input', _onInput);
     _input.addEventListener('keydown', _onKeyDown);
+
+    _container.querySelector('#sfdt-search-btn').addEventListener('click', () => {
+      const btn = _container.querySelector('#sfdt-search-btn');
+      if (btn && btn.disabled) return;
+      if (_input.value.trim()) _performSearch(_input.value);
+    });
+
+    _container.querySelector('#sfdt-deep-search-btn').addEventListener('click', () => {
+      const btn = _container.querySelector('#sfdt-deep-search-btn');
+      if (btn && btn.disabled) return;
+      const query = _input.value.trim();
+      if (query && query.length >= 2) {
+        _performSearch(query);
+        _triggerDeepSearch(query);
+      }
+    });
 
     _container.querySelector('#sfdt-rebuild-index').addEventListener('click', _rebuildIndex);
 
@@ -154,24 +175,79 @@ const SearchPalette = (() => {
     }
   }
 
+  function _setSearchBtnEnabled(enabled) {
+    const btn = _container ? _container.querySelector('#sfdt-search-btn') : null;
+    if (btn) {
+      btn.disabled = !enabled;
+      btn.classList.toggle('disabled', !enabled);
+    }
+    const deepBtn = _container ? _container.querySelector('#sfdt-deep-search-btn') : null;
+    if (deepBtn) {
+      deepBtn.disabled = !enabled;
+      deepBtn.classList.toggle('disabled', !enabled);
+    }
+  }
+
   function _setFilter(key) {
     _activeFilter = key === 'all' ? null : key;
     _container.querySelectorAll('.sfdt-chip').forEach(c =>
       c.classList.toggle('active', c.dataset.filter === key)
     );
-    _performSearch(_input.value);
+    // Re-run search with new filter if we already searched
+    if (_lastSearchQuery) {
+      _performSearch(_lastSearchQuery);
+    }
   }
 
   function _onInput() {
+    // Cancel all pending server-side searches
     clearTimeout(_debounceTimer);
     clearTimeout(_codeSearchTimer);
     clearTimeout(_recordSearchTimer);
     clearTimeout(_fieldSearchTimer);
-    _dynamicSearchAbortId++; // Cancel any running dynamic search
+    _dynamicSearchAbortId++;
     _dynamicSearchRunning = false;
-    _deepCodeSearchAbortId++; // Cancel any running deep code search
+    _deepCodeSearchAbortId++;
     _deepCodeSearchRunning = false;
-    _debounceTimer = setTimeout(() => _performSearch(_input.value), 50);
+    _deepSearchEnabled = false;
+    _lastSearchQuery = null;
+    _pendingSearches.clear();
+    _updateSearchingBanner();
+    _removeBottomLoader();
+    _removeDeepSearchBar();
+
+    const query = _input.value.trim();
+    if (!query) {
+      _currentResults = [];
+      _showSearchHistory();
+      _statusBar.textContent = _searchHistory.length > 0
+        ? `${_searchHistory.length} recent searches`
+        : 'Type and press Enter to search';
+      _setSearchBtnEnabled(false);
+      return;
+    }
+    // Show typing hint — no API calls while typing
+    _currentResults = [];
+    _setSearchBtnEnabled(true);
+    _resultsList.innerHTML = `
+      <div class="sfdt-enter-prompt">
+        <div class="sfdt-enter-prompt-text">
+          <span class="sfdt-enter-prompt-icon">${ICONS().search}</span>
+          Press <kbd>Enter</kbd> to search
+        </div>
+        <button class="sfdt-enter-prompt-btn" id="sfdt-enter-search-btn">
+          ${ICONS().search} Search
+        </button>
+      </div>
+    `;
+    // Attach click handler to the search button
+    const searchBtn = _resultsList.querySelector('#sfdt-enter-search-btn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', () => {
+        if (_input.value.trim()) _performSearch(_input.value);
+      });
+    }
+    _statusBar.textContent = 'Press Enter to search';
   }
 
   function _performSearch(query) {
@@ -182,9 +258,12 @@ const SearchPalette = (() => {
       _showSearchHistory();
       _statusBar.textContent = _searchHistory.length > 0
         ? `${_searchHistory.length} recent searches`
-        : 'Type to search records, metadata, and code';
+        : 'Type and press Enter to search';
       return;
     }
+
+    _lastSearchQuery = query;
+    _setSearchBtnEnabled(false);
 
     // Check if index is ready
     if (!META().isReady()) {
@@ -220,12 +299,13 @@ const SearchPalette = (() => {
       _pendingSearches.clear();
       _pendingSearches.add('record');
       _renderResults([]);
+      _updateSearchingBanner();
       _statusBar.textContent = 'Searching records...';
 
       clearTimeout(_recordSearchTimer);
       _recordSearchAbortId++;
       const currentRecordAbortId = _recordSearchAbortId;
-      _recordSearchTimer = setTimeout(() => _performRecordSearch(query.trim(), currentRecordAbortId), 200);
+      _recordSearchTimer = setTimeout(() => _performRecordSearch(query.trim(), currentRecordAbortId), 50);
       return;
     }
 
@@ -236,28 +316,31 @@ const SearchPalette = (() => {
       _pendingSearches.clear();
       _pendingSearches.add('field');
       _renderResults([]);
+      _updateSearchingBanner();
       _statusBar.textContent = 'Searching fields...';
 
       clearTimeout(_fieldSearchTimer);
       _fieldSearchAbortId++;
       const currentFieldAbortId = _fieldSearchAbortId;
-      _fieldSearchTimer = setTimeout(() => _performFieldSearch(query.trim(), currentFieldAbortId), 200);
+      _fieldSearchTimer = setTimeout(() => _performFieldSearch(query.trim(), currentFieldAbortId), 50);
       return;
     }
 
-    // Instant name-based search
+    // ─── Regular Search (Enter key) ───
+    // 1. Instant local index search (0 API calls)
     const results = SEARCH().searchAll(query, options);
     const elapsed = Math.round(performance.now() - start);
 
     _currentResults = results;
     _selectedIndex = 0;
+    _deepSearchEnabled = false;
+    _removeDeepSearchBar();
 
-    // Determine which async searches will run, so we can show a searching indicator
+    // 2. SOSL record search (~2-5 API calls) — the only server call in regular search
     _pendingSearches.clear();
-    const trimmed = query.trim();
-    if (trimmed.length >= 4) _pendingSearches.add('code');
-    if (trimmed.length >= 2 && (!_activeFilter || _activeFilter === 'Record')) _pendingSearches.add('record');
-    if (trimmed.length >= 3 && (!_activeFilter || _activeFilter === 'Field')) _pendingSearches.add('field');
+    if (query.trim().length >= 2) {
+      _pendingSearches.add('record');
+    }
 
     _renderResults(results);
     _updateSearchingBanner();
@@ -265,40 +348,24 @@ const SearchPalette = (() => {
     const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
     _statusBar.textContent = `${results.length} result${results.length !== 1 ? 's' : ''} (${elapsed}ms)${filterNote}`;
 
-    // Trigger async server-side code search for queries >= 4 chars
-    if (query.trim().length >= 4) {
-      clearTimeout(_codeSearchTimer);
-      _codeSearchAbortId++;
-      const currentAbortId = _codeSearchAbortId;
-      _codeSearchTimer = setTimeout(() => _performCodeSearch(query.trim(), currentAbortId), 400);
-      if (results.length === 0) {
-        _statusBar.textContent = `Searching code & records...${filterNote}`;
-      } else {
-        _statusBar.textContent += ' · searching code & records...';
-      }
-    }
-
-    // Trigger async record search (Products, Accounts, etc.) for queries >= 2 chars
-    if (query.trim().length >= 2 && (!_activeFilter || _activeFilter === 'Record')) {
+    // Fire only SOSL record search — no code, field, or dynamic searches
+    if (query.trim().length >= 2) {
       clearTimeout(_recordSearchTimer);
       _recordSearchAbortId++;
       const currentRecordAbortId = _recordSearchAbortId;
-      _recordSearchTimer = setTimeout(() => _performRecordSearch(query.trim(), currentRecordAbortId), 300);
-      if (results.length === 0 && query.trim().length < 4) {
+      _recordSearchTimer = setTimeout(() => _performRecordSearch(query.trim(), currentRecordAbortId), 50);
+      if (results.length === 0) {
         _statusBar.textContent = `Searching records...${filterNote}`;
+      } else {
+        _statusBar.textContent += ' · searching records...';
       }
+    } else {
+      // No async search needed — re-enable search button immediately
+      _setSearchBtnEnabled(true);
     }
 
-    // Trigger async field search for queries >= 3 chars
-    if (query.trim().length >= 3 && (!_activeFilter || _activeFilter === 'Field')) {
-      clearTimeout(_fieldSearchTimer);
-      _fieldSearchAbortId++;
-      const currentFieldAbortId = _fieldSearchAbortId;
-      _fieldSearchTimer = setTimeout(() => _performFieldSearch(query.trim(), currentFieldAbortId), 350);
-      if (results.length === 0 && query.trim().length < 4) {
-        _statusBar.textContent += _statusBar.textContent.includes('...') ? '' : ` · searching fields...`;
-      }
-    }
+    // Show deep search bar in the fixed slot
+    _appendDeepSearchBar(query.trim());
   }
 
   async function _performCodeSearch(query, abortId) {
@@ -340,8 +407,8 @@ const SearchPalette = (() => {
         _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${codeNote}${filterNote}`;
       }
 
-      // Fire deep code body search (SOQL LIKE on Body/Markup) to find method names, variables, etc.
-      if (query.length >= 4 && SEARCH().searchCodeDeep) {
+      // Fire deep code body search only if deep search is enabled
+      if (query.length >= 4 && SEARCH().searchCodeDeep && _deepSearchEnabled) {
         _performDeepCodeSearch(query);
       }
     } catch (e) {
@@ -430,14 +497,18 @@ const SearchPalette = (() => {
         _statusBar.textContent = `${total} result${total !== 1 ? 's' : ''}${recordNote}${filterNote}`;
       }
 
-      // Fire background dynamic SOQL search for remaining queryable objects
-      if (query.length >= 3 && SEARCH().searchRecordsDynamic) {
+      // Fire background dynamic SOQL search only if deep search is enabled
+      if (query.length >= 3 && SEARCH().searchRecordsDynamic && _deepSearchEnabled) {
         _performDynamicSearch(query);
       }
+
+      // Re-enable search button after regular search completes
+      if (!_deepSearchEnabled) _setSearchBtnEnabled(true);
     } catch (e) {
       console.debug('[SFDT] Record search error:', e.message);
       _pendingSearches.delete('record');
       _updateSearchingBanner();
+      _setSearchBtnEnabled(true);
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
     }
   }
@@ -484,6 +555,7 @@ const SearchPalette = (() => {
   }
 
   function _appendBottomLoader() {
+    if (_deepSearchEnabled) return;
     _removeBottomLoader();
     if (!_resultsList) return;
     const loader = document.createElement('div');
@@ -498,6 +570,87 @@ const SearchPalette = (() => {
     if (existing) existing.remove();
   }
 
+  // ─── Deep Search Bar ──────────────────────────────────
+  // Shows a clickable bar below results to trigger expensive code/field/dynamic searches
+
+  function _appendDeepSearchBar(query) {
+    _removeDeepSearchBar();
+    const slot = _container ? _container.querySelector('#sfdt-deep-search-slot') : null;
+    if (!slot || !query || query.length < 2) return;
+
+    const bar = document.createElement('div');
+    bar.className = 'sfdt-deep-search-bar';
+    bar.innerHTML = `
+      <span class="sfdt-deep-search-icon">${ICONS().sparkle || ICONS().search}</span>
+      <span class="sfdt-deep-search-text">Deep Search</span>
+      <span class="sfdt-deep-search-hint">Search inside Apex classes, VF pages, fields, and all objects</span>
+      <span class="sfdt-deep-search-arrow">→</span>
+    `;
+    bar.addEventListener('click', () => {
+      console.log('[SFDT] Deep search bar clicked, query:', query);
+      _triggerDeepSearch(query);
+    });
+    slot.appendChild(bar);
+    console.log('[SFDT] Deep search bar appended to slot');
+  }
+
+  function _removeDeepSearchBar() {
+    const slot = _container ? _container.querySelector('#sfdt-deep-search-slot') : null;
+    if (!slot) return;
+    slot.innerHTML = '';
+  }
+
+  function _triggerDeepSearch(query) {
+    if (!query || query.length < 2) return;
+    console.log('[SFDT] Deep search triggered for:', query);
+    _deepSearchEnabled = true;
+    _setSearchBtnEnabled(false);
+    _removeDeepSearchBar();
+
+    const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+
+    // Show deep search in-progress indicator in the fixed slot
+    const slot = _container ? _container.querySelector('#sfdt-deep-search-slot') : null;
+    if (slot) {
+      const bar = document.createElement('div');
+      bar.className = 'sfdt-deep-search-bar sfdt-deep-search-active';
+      bar.innerHTML = `<span class="sfdt-spinner"></span> <span class="sfdt-deep-search-text">Deep searching code, fields & objects...</span>`;
+      slot.appendChild(bar);
+    }
+
+    // Track deep search pending items
+    if (query.length >= 4) _pendingSearches.add('code');
+    if (query.length >= 3) _pendingSearches.add('field');
+    _updateSearchingBanner();
+
+    // Fire code SOSL search (Tooling API)
+    if (query.length >= 4) {
+      console.log('[SFDT] Deep: firing code search for:', query);
+      clearTimeout(_codeSearchTimer);
+      _codeSearchAbortId++;
+      const currentAbortId = _codeSearchAbortId;
+      _codeSearchTimer = setTimeout(() => _performCodeSearch(query, currentAbortId), 50);
+    }
+
+    // Fire field search (EntityParticle)
+    if (query.length >= 3) {
+      console.log('[SFDT] Deep: firing field search for:', query);
+      clearTimeout(_fieldSearchTimer);
+      _fieldSearchAbortId++;
+      const currentFieldAbortId = _fieldSearchAbortId;
+      _fieldSearchTimer = setTimeout(() => _performFieldSearch(query, currentFieldAbortId), 50);
+    }
+
+    // Fire dynamic record search across all custom objects
+    if (query.length >= 3 && SEARCH().searchRecordsDynamic) {
+      console.log('[SFDT] Deep: firing dynamic search for:', query);
+      _dynamicSearchAbortId++;
+      _performDynamicSearch(query);
+    }
+
+    _statusBar.textContent = `${_currentResults.length} results · deep searching...${filterNote}`;
+  }
+
   function _updateSearchingBanner() {
     if (!_searchingBanner) return;
     const pending = [];
@@ -506,6 +659,19 @@ const SearchPalette = (() => {
     if (_pendingSearches.has('field')) pending.push('fields');
 
     if (pending.length === 0) {
+      _searchingBanner.style.display = 'none';
+      // If deep search was running and all searches are done, clean up
+      if (_deepSearchEnabled) {
+        _removeDeepSearchBar(); // Remove the "Deep searching..." active bar
+        _setSearchBtnEnabled(true);
+        const filterNote = _activeFilter ? ` (filtered: ${_activeFilter})` : '';
+        _statusBar.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${filterNote} · deep search complete`;
+      }
+      return;
+    }
+
+    // When deep search is active, hide the banner — the deep search slot shows status
+    if (_deepSearchEnabled) {
       _searchingBanner.style.display = 'none';
       return;
     }
@@ -557,10 +723,39 @@ const SearchPalette = (() => {
     }
   }
 
+  function _buildInlineDeepSearchHTML(query) {
+    if (!query || query.length < 2) return '';
+    return `
+      <div class="sfdt-deep-search-inline" id="sfdt-inline-deep-search">
+        <span class="sfdt-deep-search-icon">${ICONS().sparkle || ICONS().search}</span>
+        <div style="flex:1">
+          <div class="sfdt-deep-search-text" style="margin-bottom:2px">Deep Search</div>
+          <div class="sfdt-deep-search-hint" style="margin-left:0">Search inside Apex code, VF pages, fields & all objects</div>
+        </div>
+        <span class="sfdt-deep-search-arrow">→</span>
+      </div>
+    `;
+  }
+
+  function _attachInlineDeepSearchHandler() {
+    if (!_resultsList) return;
+    const el = _resultsList.querySelector('#sfdt-inline-deep-search');
+    if (el) {
+      el.addEventListener('click', () => {
+        const q = _input ? _input.value.trim() : '';
+        if (q) _triggerDeepSearch(q);
+      });
+    }
+  }
+
   function _renderResults(results) {
     if (results.length === 0) {
       if (_pendingSearches.size > 0) {
-        _resultsList.innerHTML = '<div class="sfdt-searching"><span class="sfdt-spinner"></span> Searching...</div>';
+        if (_deepSearchEnabled) {
+          _resultsList.innerHTML = '';
+        } else {
+          _resultsList.innerHTML = '<div class="sfdt-searching"><span class="sfdt-spinner"></span> Searching...</div>';
+        }
       } else {
         _resultsList.innerHTML = _input.value
           ? '<div class="sfdt-empty">No results found</div>'
@@ -693,7 +888,11 @@ const SearchPalette = (() => {
         break;
       case 'Enter':
         e.preventDefault();
-        _selectResult(_selectedIndex, e.shiftKey);
+        if (_currentResults.length > 0 && _selectedIndex >= 0) {
+          _selectResult(_selectedIndex, e.shiftKey);
+        } else if (_input.value.trim().length > 0) {
+          _performSearch(_input.value);
+        }
         break;
       case 'Escape':
         e.preventDefault();
@@ -837,9 +1036,52 @@ const SearchPalette = (() => {
     _selectedIndex = 0;
     _pendingSearches.clear();
     _renderResults([]);
+    _removeDeepSearchBar();
+    _deepSearchEnabled = false;
+    _lastSearchQuery = null;
     if (_searchingBanner) _searchingBanner.style.display = 'none';
-    _statusBar.textContent = 'Type to search records, metadata, and code';
+    _statusBar.textContent = 'Type and press Enter to search';
+    _setSearchBtnEnabled(false);
     requestAnimationFrame(() => _input.focus());
+    _showOnboardingIfNeeded();
+  }
+
+  function _showOnboardingIfNeeded() {
+    const ONBOARD_KEY = 'sfdt_search_onboarded';
+    try { if (localStorage.getItem(ONBOARD_KEY)) return; } catch { return; }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sfdt-onboarding-overlay';
+    overlay.innerHTML = `
+      <div class="sfdt-onboarding-card">
+        <div class="sfdt-onboarding-title">Welcome to Search Palette</div>
+        <div class="sfdt-onboarding-row">
+          <div class="sfdt-onboarding-item">
+            <span class="sfdt-onboarding-icon sfdt-onboarding-search">${ICONS().sparkle || ICONS().search}</span>
+            <div class="sfdt-onboarding-label">Search</div>
+            <div class="sfdt-onboarding-desc">Quick search by name across metadata, records &amp; objects. Press <kbd>Enter</kbd> or click.</div>
+          </div>
+          <div class="sfdt-onboarding-divider"></div>
+          <div class="sfdt-onboarding-item">
+            <span class="sfdt-onboarding-icon sfdt-onboarding-deep">${ICONS().search}</span>
+            <div class="sfdt-onboarding-label">Deep Search</div>
+            <div class="sfdt-onboarding-desc">Searches inside Apex code bodies, VF pages, field labels &amp; all custom objects.</div>
+          </div>
+        </div>
+        <button class="sfdt-onboarding-dismiss">Got it!</button>
+      </div>
+    `;
+
+    const dialog = _container.querySelector('.sfdt-palette');
+    dialog.appendChild(overlay);
+
+    const dismiss = () => {
+      overlay.remove();
+      try { localStorage.setItem(ONBOARD_KEY, '1'); } catch { /* ignore */ }
+      _input.focus();
+    };
+    overlay.querySelector('.sfdt-onboarding-dismiss').addEventListener('click', dismiss);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
   }
 
   function hide() {
@@ -863,6 +1105,7 @@ const SearchPalette = (() => {
     _pendingSearches.clear();
     if (_searchingBanner) _searchingBanner.style.display = 'none';
     _removeBottomLoader();
+    _removeDeepSearchBar();
   }
 
   function toggle() { _visible ? hide() : show(); }

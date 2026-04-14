@@ -94,7 +94,12 @@ const DebugLogPanel = (() => {
     _container.querySelector('#dl-refresh').addEventListener('click', _loadLogs);
     _container.querySelector('#dl-auto').addEventListener('click', _toggleAutoRefresh);
     _container.querySelector('#dl-clear').addEventListener('click', _clearLogs);
-    _container.querySelector('#dl-toggle-size').addEventListener('click', function() { _panel.classList.toggle('expanded'); });
+    _container.querySelector('#dl-toggle-size').addEventListener('click', function() {
+      _panel.classList.toggle('expanded');
+      const I = ICONS();
+      this.innerHTML = _panel.classList.contains('expanded') ? I.minimize : I.maximize;
+      this.title = _panel.classList.contains('expanded') ? 'Restore Size' : 'Expand';
+    });
 
     SHADOW().initPanelResize(_panel, 'top', 'sfdt_debuglog_height');
 

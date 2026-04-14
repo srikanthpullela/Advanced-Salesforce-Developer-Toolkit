@@ -178,6 +178,161 @@ svg {
 
 .sfdt-input::placeholder { color: var(--fg3) !important; }
 
+/* Search Button in header */
+.sfdt-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px !important;
+  background: var(--accent, #89b4fa) !important;
+  border: none !important;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.sfdt-search-btn:hover {
+  opacity: 0.8;
+}
+.sfdt-search-btn.disabled,
+.sfdt-search-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.sfdt-search-btn svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: var(--bg, #1e1e2e) !important;
+}
+.sfdt-btn-label {
+  font-size: 11px !important;
+  font-weight: 600;
+  color: var(--bg, #1e1e2e) !important;
+  white-space: nowrap;
+}
+/* Deep Search button — distinct style */
+.sfdt-deep-search-btn {
+  background: transparent !important;
+  border: 1.5px solid var(--accent, #89b4fa) !important;
+  border-radius: 6px;
+}
+.sfdt-deep-search-btn svg {
+  color: var(--accent, #89b4fa) !important;
+}
+.sfdt-deep-search-btn .sfdt-btn-label {
+  color: var(--accent, #89b4fa) !important;
+}
+.sfdt-deep-search-btn:hover {
+  background: rgba(137,180,250,0.15) !important;
+  opacity: 1;
+}
+
+/* Onboarding overlay */
+.sfdt-onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.2s ease-out;
+}
+.sfdt-onboarding-card {
+  background: var(--bg, #1e1e2e);
+  border: 1px solid var(--border, #313244);
+  border-radius: 12px;
+  padding: 24px 28px !important;
+  max-width: 420px;
+  text-align: center;
+}
+.sfdt-onboarding-title {
+  font-size: 16px !important;
+  font-weight: 700;
+  color: var(--fg, #cdd6f4);
+  margin-bottom: 20px;
+}
+.sfdt-onboarding-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.sfdt-onboarding-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.sfdt-onboarding-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sfdt-onboarding-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+.sfdt-onboarding-search {
+  background: var(--accent, #89b4fa);
+}
+.sfdt-onboarding-search svg {
+  color: var(--bg, #1e1e2e) !important;
+}
+.sfdt-onboarding-deep {
+  background: transparent;
+  border: 2px solid var(--accent, #89b4fa);
+}
+.sfdt-onboarding-deep svg {
+  color: var(--accent, #89b4fa) !important;
+}
+.sfdt-onboarding-label {
+  font-size: 13px !important;
+  font-weight: 700;
+  color: var(--fg, #cdd6f4);
+}
+.sfdt-onboarding-desc {
+  font-size: 11px !important;
+  color: var(--fg3, #585b70);
+  line-height: 1.5;
+}
+.sfdt-onboarding-desc kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background: var(--bg3, #313244);
+  border: 1px solid var(--border, #45475a);
+  border-radius: 3px;
+  font-size: 10px !important;
+  color: var(--accent, #89b4fa);
+}
+.sfdt-onboarding-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border, #313244);
+  margin: 8px 0;
+}
+.sfdt-onboarding-dismiss {
+  padding: 8px 28px !important;
+  background: var(--accent, #89b4fa) !important;
+  color: var(--bg, #1e1e2e) !important;
+  border: none !important;
+  border-radius: 8px;
+  font-size: 13px !important;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.sfdt-onboarding-dismiss:hover {
+  opacity: 0.85;
+}
+
 .sfdt-shortcut {
   font-size: 11px;
   color: var(--fg3);
@@ -468,6 +623,66 @@ mark.sfdt-highlight {
   font-size: 13px !important;
 }
 
+/* Enter to Search prompt */
+.sfdt-enter-prompt {
+  padding: 32px 24px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.sfdt-enter-prompt-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg2, #a6adc8);
+  font-size: 15px !important;
+  font-weight: 500;
+}
+.sfdt-enter-prompt-text kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--bg3, #313244);
+  border: 1px solid var(--border, #45475a);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px !important;
+  color: var(--accent, #89b4fa);
+  font-weight: 600;
+}
+.sfdt-enter-prompt-icon {
+  color: var(--fg3, #585b70);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+.sfdt-enter-prompt-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+.sfdt-enter-prompt-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px !important;
+  background: var(--accent, #89b4fa) !important;
+  color: var(--bg, #1e1e2e) !important;
+  border: none !important;
+  border-radius: 6px;
+  font-size: 13px !important;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.sfdt-enter-prompt-btn:hover {
+  opacity: 0.85;
+}
+.sfdt-enter-prompt-btn svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
 .sfdt-searching {
   padding: 24px !important;
   text-align: center;
@@ -523,6 +738,91 @@ mark.sfdt-highlight {
   gap: 8px;
   border-top: 1px solid var(--border, #313244);
   opacity: 0.8;
+}
+
+/* Deep Search Slot — fixed between results and status bar */
+.sfdt-deep-search-slot {
+  flex-shrink: 0;
+}
+
+/* Deep Search Bar — shimmer glow animation */
+@keyframes sfdt-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.sfdt-deep-search-bar {
+  padding: 10px 16px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border, #313244);
+  background: linear-gradient(90deg, var(--bg2, #181825) 0%, rgba(137,180,250,0.08) 25%, rgba(137,180,250,0.15) 50%, rgba(137,180,250,0.08) 75%, var(--bg2, #181825) 100%);
+  background-size: 200% 100%;
+  animation: sfdt-shimmer 3s ease-in-out infinite;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  font-size: 12px !important;
+}
+.sfdt-deep-search-bar:hover {
+  background: linear-gradient(90deg, var(--bg-hover, #45475a) 0%, rgba(137,180,250,0.18) 50%, var(--bg-hover, #45475a) 100%);
+  background-size: 200% 100%;
+  animation: sfdt-shimmer 1.5s ease-in-out infinite;
+  border-color: var(--accent, #89b4fa);
+}
+.sfdt-deep-search-bar.sfdt-deep-search-active {
+  cursor: default;
+  animation: none;
+  background: var(--bg2, #181825);
+  opacity: 0.8;
+}
+.sfdt-deep-search-bar.sfdt-deep-search-active:hover {
+  background: var(--bg2, #181825);
+}
+.sfdt-deep-search-icon {
+  color: var(--accent, #89b4fa);
+  flex-shrink: 0;
+}
+.sfdt-deep-search-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.sfdt-deep-search-text {
+  color: var(--accent, #89b4fa);
+  font-weight: 600;
+  font-size: 12px !important;
+}
+.sfdt-deep-search-hint {
+  color: var(--fg3, #585b70);
+  font-size: 11px !important;
+  margin-left: 4px;
+  flex: 1;
+}
+.sfdt-deep-search-arrow {
+  color: var(--accent, #89b4fa);
+  font-size: 16px !important;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+/* Inline deep search card inside results panel */
+.sfdt-deep-search-inline {
+  margin: 12px 16px !important;
+  padding: 14px 16px !important;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(137,180,250,0.25);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(137,180,250,0.05) 0%, rgba(137,180,250,0.12) 50%, rgba(137,180,250,0.05) 100%);
+  background-size: 200% 100%;
+  animation: sfdt-shimmer 3s ease-in-out infinite;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.sfdt-deep-search-inline:hover {
+  border-color: var(--accent, #89b4fa);
+  box-shadow: 0 0 12px rgba(137,180,250,0.2);
+  animation: sfdt-shimmer 1.5s ease-in-out infinite;
 }
 
 .sfdt-status-bar {
@@ -592,6 +892,10 @@ mark.sfdt-highlight {
   max-width: 50vw;
   height: 100vh;
   animation: slideLeft 0.2s ease-out;
+}
+.sfdt-panel-right.expanded {
+  width: 80vw;
+  max-width: 80vw;
 }
 @keyframes slideLeft {
   from { opacity: 0; transform: translateX(20px); }

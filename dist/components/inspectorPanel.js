@@ -39,6 +39,7 @@ const InspectorPanel = (() => {
             <button class="sfdt-btn sfdt-btn-sm" id="insp-download" title="Download">${I.download}</button>
             <button class="sfdt-btn sfdt-btn-sm" id="insp-compare" title="Compare">${I.compare}</button>
             <button class="sfdt-btn sfdt-btn-sm" id="insp-refresh" title="Refresh">${I.refresh}</button>
+            <button class="sfdt-btn sfdt-btn-sm" id="insp-toggle-size" title="Toggle Size">${I.maximize}</button>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="insp-close" title="Close">${I.x}</button>
           </div>
         </div>
@@ -69,6 +70,13 @@ const InspectorPanel = (() => {
     _container.querySelector('#insp-json').addEventListener('click', _showJSON);
     _container.querySelector('#insp-download').addEventListener('click', _downloadJSON);
     _container.querySelector('#insp-compare').addEventListener('click', _promptCompare);
+    _container.querySelector('#insp-toggle-size').addEventListener('click', () => {
+      _panel.classList.toggle('expanded');
+      const btn = _container.querySelector('#insp-toggle-size');
+      const I = ICONS();
+      btn.innerHTML = _panel.classList.contains('expanded') ? I.minimize : I.maximize;
+      btn.title = _panel.classList.contains('expanded') ? 'Restore Size' : 'Expand';
+    });
     _container.querySelector('#insp-filter').addEventListener('input', (e) => {
       _fieldFilter = e.target.value;
       _renderFields();
