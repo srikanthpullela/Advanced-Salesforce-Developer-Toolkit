@@ -28,7 +28,7 @@ Instantly inspect any Salesforce record with full field metadata.
 - Side-by-side record comparison
 - JSON export and click-to-copy for any value
 
-### 🧭 Smart Navigator — `Ctrl+Shift+G` / `Cmd+Shift+G`
+### 🧭 Smart Navigator — `Ctrl+Shift+Y` / `Cmd+Shift+Y`
 
 One-stop navigation hub with **26+ built-in setup shortcuts**.
 
@@ -37,7 +37,7 @@ One-stop navigation hub with **26+ built-in setup shortcuts**.
 - Recent pages tracking (last 20 visited)
 - Async code search with score-based relevance ranking
 
-### 📊 SOQL Query Tool — `Ctrl+Shift+Q` / `Cmd+Shift+Q`
+### 📊 SOQL Query Tool — `Ctrl+Shift+L` / `Cmd+Shift+L`
 
 Full-featured SOQL editor with execution, analysis, and export.
 
@@ -49,7 +49,7 @@ Full-featured SOQL editor with execution, analysis, and export.
 - Export results as CSV, JSON, or copy to clipboard
 - Smart table rendering with pagination
 
-### 🐛 Debug Log Analyzer — `Ctrl+Shift+D` / `Cmd+Shift+D`
+### 🐛 Debug Log Analyzer — `Ctrl+Shift+K` / `Cmd+Shift+K`
 
 Advanced Apex debug log analysis with rich visualizations.
 
@@ -97,9 +97,9 @@ CPQ-aware hierarchical record builder with a visual tree.
 | --- | --- | --- |
 | Search Palette | `Ctrl+Shift+P` | `Cmd+Shift+P` |
 | Record Inspector | `Ctrl+Shift+X` | `Cmd+Shift+X` |
-| SOQL Query Tool | `Ctrl+Shift+Q` | `Cmd+Shift+Q` |
-| Smart Navigator | `Ctrl+Shift+G` | `Cmd+Shift+G` |
-| Debug Log Analyzer | `Ctrl+Shift+D` | `Cmd+Shift+D` |
+| SOQL Query Tool | `Ctrl+Shift+L` | `Cmd+Shift+L` |
+| Smart Navigator | `Ctrl+Shift+Y` | `Cmd+Shift+Y` |
+| Debug Log Analyzer | `Ctrl+Shift+K` | `Cmd+Shift+K` |
 | Execute Anonymous | `Ctrl+Shift+E` | `Cmd+Shift+E` |
 | Close Active Panel | `Escape` | `Escape` |
 

@@ -26,8 +26,11 @@ Right-click on any Salesforce page to quickly search selected text, inspect the 
 
 ⌨️ KEYBOARD SHORTCUTS
 - Cmd/Ctrl+Shift+P — Open global search palette
-- Cmd/Ctrl+Shift+I — Open record inspector
-- Cmd/Ctrl+Shift+Q — Open SOQL query editor
+- Cmd/Ctrl+Shift+X — Open record inspector
+- Cmd/Ctrl+Shift+L — Open SOQL query editor
+- Cmd/Ctrl+Shift+Y — Open smart navigator
+- Cmd/Ctrl+Shift+K — Open debug log analyzer
+- Cmd/Ctrl+Shift+E — Open execute anonymous
 All features accessible via keyboard for maximum developer productivity.
 
 ✅ WORKS EVERYWHERE IN SALESFORCE

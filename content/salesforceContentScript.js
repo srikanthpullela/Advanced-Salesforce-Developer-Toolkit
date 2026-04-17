@@ -115,17 +115,17 @@
       INSPECTOR.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Q') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'L') {
       e.preventDefault(); e.stopPropagation();
       SOQL.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'G') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Y') {
       e.preventDefault(); e.stopPropagation();
       NAVIGATOR.toggle();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'D') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'K') {
       e.preventDefault(); e.stopPropagation();
       DEBUGLOG.toggle();
       return;
@@ -237,15 +237,15 @@
             ${ICONS.eye}
             <span class="sfdt-toolbar-label">Inspect</span>
           </button>
-          <button class="sfdt-toolbar-btn" data-action="soql" title="SOQL Query (Ctrl+Shift+Q)">
+          <button class="sfdt-toolbar-btn" data-action="soql" title="SOQL Query (Ctrl+Shift+L)">
             ${ICONS.database}
             <span class="sfdt-toolbar-label">SOQL</span>
           </button>
-          <button class="sfdt-toolbar-btn" data-action="navigator" title="Navigator (Ctrl+Shift+G)">
+          <button class="sfdt-toolbar-btn" data-action="navigator" title="Navigator (Ctrl+Shift+Y)">
             ${ICONS.compass}
             <span class="sfdt-toolbar-label">Navigate</span>
           </button>
-          <button class="sfdt-toolbar-btn" data-action="debuglog" title="Debug Logs (Ctrl+Shift+D)">
+          <button class="sfdt-toolbar-btn" data-action="debuglog" title="Debug Logs (Ctrl+Shift+K)">
             ${ICONS.terminal}
             <span class="sfdt-toolbar-label">Logs</span>
           </button>
