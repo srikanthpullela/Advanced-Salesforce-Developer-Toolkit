@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Advanced Salesforce Developer Toolkit",
-  "version": "1.1.0",
-  "description": "Salesforce developer & admin toolkit: record inspector, SOQL query editor, metadata search, Apex debug logs, data builder.",
+  "version": "1.2.0",
+  "description": "Salesforce developer & admin toolkit: record inspector, SOQL query editor with syntax highlighting, metadata search with auto-search, Apex debug logs, data builder.",
   "permissions": [
     "activeTab",
     "storage",

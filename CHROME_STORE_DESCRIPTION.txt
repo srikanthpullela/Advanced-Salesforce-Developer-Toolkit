@@ -2,12 +2,23 @@ Advanced Salesforce Developer Toolkit — The Ultimate Productivity Extension fo
 
 🔍 GLOBAL SEARCH (Cmd/Ctrl+Shift+P)
 Instantly search across all Salesforce metadata — custom objects, fields, Apex classes, Apex triggers, Visualforce pages, Lightning components, flows, permission sets, profiles, validation rules, workflow rules, and more. Works like VS Code command palette right inside Salesforce.
+- Two search modes: Quick Search (local + SOSL) and Deep Search (code bodies, field labels, all custom objects)
+- Auto Search toggle — enable to search automatically as you type with 500ms debounce
+- Search history and category chip filtering
 
 🔎 RECORD INSPECTOR
 Inspect any Salesforce record in real time. View all field values, field API names, field types, record type, owner, created/modified dates, and system fields. Copy field API names with one click. Perfect for debugging and troubleshooting data issues in Sales Cloud, Service Cloud, and any Salesforce org.
 
 📝 SOQL QUERY EDITOR
-Write and execute SOQL queries directly from any Salesforce page. Features syntax highlighting, auto-complete for object and field names, query history, and export results to CSV. No more switching to Developer Console or Workbench for quick queries.
+Write and execute SOQL queries directly from any Salesforce page. Features include:
+- Syntax highlighting — SOQL keywords (SELECT, FROM, WHERE) in purple, strings in green, numbers in orange
+- Auto-detect Tooling API — automatically routes queries for ApexClass, ValidationRule, EntityDefinition, etc. to the Tooling API
+- Auto-complete for object and field names with inline field hints
+- Row count badge on the Run button showing result count
+- Query history, favorites, and 10 built-in example queries
+- Export results to CSV, JSON, or copy to clipboard
+- Inline CRUD — edit, clone, delete, and create records directly from query results
+- Keyboard shortcuts: Ctrl+Enter to run, Ctrl+Shift+Enter to force Tooling API
 
 🚀 QUICK NAVIGATOR
 Navigate to any Salesforce Setup page instantly. Jump to object manager, custom objects, custom fields, page layouts, record types, Apex classes, Apex triggers, Lightning components, flows, process builder, permission sets, profiles, roles, users, and all admin setup pages with keyboard shortcuts.

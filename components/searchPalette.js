@@ -32,8 +32,12 @@ const SearchPalette = (() => {
   let _searchHistory = [];
   let _deepSearchEnabled = false;
   let _lastSearchQuery = null;
+  let _autoSearchEnabled = false;
+  let _autoSearchTimer = null;
 
   const HISTORY_KEY = 'sfdt_search_history';
+  const AUTO_SEARCH_KEY = 'sfdt_auto_search';
+  const AUTO_SEARCH_DEBOUNCE = 500;
   const MAX_HISTORY = 30;
 
   const TYPE_FILTERS = [
@@ -71,6 +75,11 @@ const SearchPalette = (() => {
             <input type="text" class="sfdt-input" placeholder="Search records, metadata, code, fields..." autocomplete="off" spellcheck="false" />
             <button class="sfdt-search-btn" id="sfdt-search-btn" title="Search">${ICONS().sparkle || ICONS().search}<span class="sfdt-btn-label">Search</span></button>
             <button class="sfdt-search-btn sfdt-deep-search-btn" id="sfdt-deep-search-btn" title="Deep Search — code, fields & all objects">${ICONS().search}<span class="sfdt-btn-label">Deep</span></button>
+            <label class="sfdt-auto-toggle" title="Auto Search — automatically search as you type">
+              <input type="checkbox" id="sfdt-auto-search-toggle" />
+              <span class="sfdt-toggle-slider"></span>
+              <span class="sfdt-toggle-label">Auto</span>
+            </label>
             <span class="sfdt-shortcut">ESC</span>
           </div>
           <div class="sfdt-filters"></div>
@@ -130,6 +139,23 @@ const SearchPalette = (() => {
 
     _container.querySelector('#sfdt-rebuild-index').addEventListener('click', _rebuildIndex);
 
+    // Auto Search toggle
+    const autoToggle = _container.querySelector('#sfdt-auto-search-toggle');
+    try { _autoSearchEnabled = localStorage.getItem(AUTO_SEARCH_KEY) === '1'; } catch { /* ignore */ }
+    if (autoToggle) {
+      autoToggle.checked = _autoSearchEnabled;
+      _updateAutoSearchUI();
+      autoToggle.addEventListener('change', () => {
+        _autoSearchEnabled = autoToggle.checked;
+        try { localStorage.setItem(AUTO_SEARCH_KEY, _autoSearchEnabled ? '1' : '0'); } catch { /* ignore */ }
+        _updateAutoSearchUI();
+        if (_autoSearchEnabled && _input.value.trim().length >= 2) {
+          _performSearch(_input.value);
+          _triggerDeepSearch(_input.value.trim());
+        }
+      });
+    }
+
     _loadHistory();
 
     if (!META().isReady()) {
@@ -188,6 +214,14 @@ const SearchPalette = (() => {
     }
   }
 
+  function _updateAutoSearchUI() {
+    if (!_container) return;
+    const searchBtn = _container.querySelector('#sfdt-search-btn');
+    const deepBtn = _container.querySelector('#sfdt-deep-search-btn');
+    if (searchBtn) searchBtn.classList.toggle('sfdt-auto-hidden', _autoSearchEnabled);
+    if (deepBtn) deepBtn.classList.toggle('sfdt-auto-hidden', _autoSearchEnabled);
+  }
+
   function _setFilter(key) {
     _activeFilter = key === 'all' ? null : key;
     _container.querySelectorAll('.sfdt-chip').forEach(c =>
@@ -205,6 +239,7 @@ const SearchPalette = (() => {
     clearTimeout(_codeSearchTimer);
     clearTimeout(_recordSearchTimer);
     clearTimeout(_fieldSearchTimer);
+    clearTimeout(_autoSearchTimer);
     _dynamicSearchAbortId++;
     _dynamicSearchRunning = false;
     _deepCodeSearchAbortId++;
@@ -218,14 +253,32 @@ const SearchPalette = (() => {
 
     const query = _input.value.trim();
     if (!query) {
+      clearTimeout(_autoSearchTimer);
       _currentResults = [];
       _showSearchHistory();
       _statusBar.textContent = _searchHistory.length > 0
         ? `${_searchHistory.length} recent searches`
-        : 'Type and press Enter to search';
+        : _autoSearchEnabled ? 'Type to auto search' : 'Type and press Enter to search';
       _setSearchBtnEnabled(false);
       return;
     }
+
+    // ─── Auto Search mode ───
+    if (_autoSearchEnabled) {
+      clearTimeout(_autoSearchTimer);
+      if (query.length >= 2) {
+        _statusBar.textContent = 'Searching...';
+        _autoSearchTimer = setTimeout(() => {
+          _performSearch(query);
+          _triggerDeepSearch(query);
+        }, AUTO_SEARCH_DEBOUNCE);
+      } else {
+        _statusBar.textContent = 'Type at least 2 characters...';
+      }
+      return;
+    }
+
+    // ─── Manual Search mode ───
     // Show typing hint — no API calls while typing
     _currentResults = [];
     _setSearchBtnEnabled(true);
@@ -1047,7 +1100,7 @@ const SearchPalette = (() => {
   }
 
   function _showOnboardingIfNeeded() {
-    const ONBOARD_KEY = 'sfdt_search_onboarded';
+    const ONBOARD_KEY = 'sfdt_search_onboarded_v2';
     try { if (localStorage.getItem(ONBOARD_KEY)) return; } catch { return; }
 
     const overlay = document.createElement('div');
@@ -1066,6 +1119,12 @@ const SearchPalette = (() => {
             <span class="sfdt-onboarding-icon sfdt-onboarding-deep">${ICONS().search}</span>
             <div class="sfdt-onboarding-label">Deep Search</div>
             <div class="sfdt-onboarding-desc">Searches inside Apex code bodies, VF pages, field labels &amp; all custom objects.</div>
+          </div>
+          <div class="sfdt-onboarding-divider"></div>
+          <div class="sfdt-onboarding-item">
+            <span class="sfdt-onboarding-icon sfdt-onboarding-auto">⚡</span>
+            <div class="sfdt-onboarding-label">Auto</div>
+            <div class="sfdt-onboarding-desc">Toggle Auto to search automatically as you type — fires both normal &amp; deep search.</div>
           </div>
         </div>
         <button class="sfdt-onboarding-dismiss">Got it!</button>

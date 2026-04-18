@@ -41,6 +41,8 @@
     if (host.includes('help.salesforce.com') || host.includes('developer.salesforce.com')) return false;
     if (host.includes('status.salesforce.com')) return false;
     if (path === '/login' || path.startsWith('/login/') || path.startsWith('/secur/')) return false;
+    // Exclude REST/SOAP API endpoints — raw JSON/XML pages
+    if (path.startsWith('/services/')) return false;
 
     // Include: Lightning, Classic, Setup, VF pages, REST-capable org domains
     if (host.includes('.my.salesforce.com')) return true;

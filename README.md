@@ -11,10 +11,12 @@ A comprehensive Chrome extension that supercharges your Salesforce development w
 A VS Code-style command palette for instant search across your entire Salesforce org.
 
 - Search across **12+ categories**: Apex Classes, Triggers, LWC, Aura Components, Flows, Validation Rules, Custom Objects, Fields, Visualforce Pages, Reports, and Records
+- **Two search modes**: Quick Search (local index + SOSL) and Deep Search (code bodies, field labels, all custom objects)
+- **Auto Search toggle** — enable to search automatically as you type (500ms debounce, fires both normal + deep search)
 - Smart metadata indexing with automatic cache management
-- Server-side SOSL code search for finding methods and classes
 - Search history (up to 30 recent searches)
 - Category chip filtering for quick result narrowing
+- One-time onboarding overlay explaining Search vs Deep vs Auto modes
 
 ### 🔎 Record Inspector — `Ctrl+Shift+X` / `Cmd+Shift+X`
 
@@ -41,13 +43,17 @@ One-stop navigation hub with **26+ built-in setup shortcuts**.
 
 Full-featured SOQL editor with execution, analysis, and export.
 
+- **Syntax highlighting** — keywords in purple, strings in green, numbers in orange
+- **Auto-detect Tooling API** — automatically routes queries for ApexClass, ValidationRule, EntityDefinition, etc. to the Tooling API
 - Syntax-aware editor with autocomplete for objects and fields
-- Execute queries against REST API or Tooling API
+- **Row count badge** on the Run button after query execution
 - 10 built-in example queries to get started
 - Real-time query analysis with performance hints
 - Query history and favorites
 - Export results as CSV, JSON, or copy to clipboard
+- Inline CRUD — edit, clone, delete, and create records from results
 - Smart table rendering with pagination
+- **Keyboard shortcuts**: `Ctrl+Enter` to run, `Ctrl+Shift+Enter` to force Tooling API
 
 ### 🐛 Debug Log Analyzer — `Ctrl+Shift+K` / `Cmd+Shift+K`
 

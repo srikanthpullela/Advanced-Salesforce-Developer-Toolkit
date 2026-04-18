@@ -19,6 +19,22 @@ const SOQLPanel = (() => {
   let _suggestionIndex = -1;
   let _activeTab = 'editor';
 
+  // Known Tooling API objects — auto-detect when querying these
+  const TOOLING_OBJECTS = new Set([
+    'apexclass', 'apextrigger', 'apexpage', 'apexcomponent', 'apexlog',
+    'apextestresult', 'apextestqueueitem', 'apexcodecover', 'apexcodecoverage',
+    'apexcodecoverageaggregate', 'apexexecutionoverlayaction',
+    'validationrule', 'workflowrule', 'flowdefinition', 'flow',
+    'customfield', 'customobject', 'entitydefinition', 'entityparticle',
+    'fielddefinition', 'customtab', 'staticresource',
+    'aaboracomponentbundle', 'auradefinitionbundle', 'auradefinition',
+    'lightningcomponentbundle', 'lightningcomponentresource',
+    'debuglevel', 'traceflag', 'metadatacontainer',
+    'apexclassmember', 'apextriggermember', 'apexpagemember',
+    'scontrol', 'weblink', 'profile', 'permissionset',
+    'installedsubscriberpackage', 'subscriberpackage', 'subscriberpackageversion'
+  ]);
+
   const EXAMPLE_QUERIES = [
     { name: 'All Accounts (first 10)', query: 'SELECT Id, Name, Industry, Type, Phone\nFROM Account\nLIMIT 10' },
     { name: 'Recent Contacts', query: 'SELECT Id, FirstName, LastName, Email, Phone, Account.Name\nFROM Contact\nORDER BY CreatedDate DESC\nLIMIT 20' },
@@ -64,6 +80,7 @@ const SOQLPanel = (() => {
         <div class="sfdt-soql-content">
           <div class="sfdt-soql-editor-area" id="soql-editor-area">
             <div class="sfdt-soql-editor-wrapper">
+              <pre class="sfdt-soql-highlight" id="soql-highlight" aria-hidden="true"></pre>
               <textarea class="sfdt-soql-editor" id="soql-editor"
                         placeholder="SELECT Id, Name FROM Account LIMIT 10&#10;&#10;Tip: Press Ctrl+Enter to run query"
                         spellcheck="false" autocomplete="off"></textarea>
@@ -71,7 +88,7 @@ const SOQLPanel = (() => {
             </div>
             <div class="sfdt-soql-toolbar">
               <button class="sfdt-btn sfdt-btn-primary" id="soql-run" title="Run Query (Ctrl+Enter)">${I.play} Run</button>
-              <button class="sfdt-btn" id="soql-tooling" title="Run as Tooling API query">${I.wrench} Tooling</button>
+              <button class="sfdt-btn" id="soql-tooling" title="Run as Tooling API query (Ctrl+Shift+Enter)">${I.wrench} Tooling</button>
               <button class="sfdt-btn" id="soql-analyze" title="Analyze query">${I.chart} Analyze</button>
               <button class="sfdt-btn" id="soql-format" title="Format query">${I.code} Format</button>
               <button class="sfdt-btn" id="soql-save-fav" title="Save to favorites">${I.star} Save</button>
@@ -135,6 +152,10 @@ const SOQLPanel = (() => {
 
     _editor.addEventListener('keydown', _onEditorKeyDown);
     _editor.addEventListener('input', _onEditorInput);
+    _editor.addEventListener('scroll', () => {
+      const highlight = _container.querySelector('#soql-highlight');
+      if (highlight) { highlight.scrollTop = _editor.scrollTop; highlight.scrollLeft = _editor.scrollLeft; }
+    });
 
     // Click outside field hints to close them
     _container.addEventListener('click', (e) => {
@@ -223,6 +244,7 @@ const SOQLPanel = (() => {
       item.addEventListener('click', () => {
         const idx = parseInt(item.dataset.index, 10);
         _editor.value = history[idx].query;
+        _updateHighlight();
         _editor.focus();
         dropdown.style.display = 'none';
         // Switch to editor tab if not already
@@ -275,6 +297,11 @@ const SOQLPanel = (() => {
   }
 
   function _onEditorKeyDown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
+      e.preventDefault();
+      _runToolingQuery();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       _runQuery();
@@ -298,10 +325,40 @@ const SOQLPanel = (() => {
       const start = _editor.selectionStart;
       _editor.value = _editor.value.substring(0, start) + '  ' + _editor.value.substring(_editor.selectionEnd);
       _editor.selectionStart = _editor.selectionEnd = start + 2;
+      _updateHighlight();
     }
   }
 
-  function _onEditorInput() { _showAutocomplete(); _showFieldHintsIfNeeded(); }
+  // ─── Syntax Highlighting ───
+  const SOQL_KEYWORDS = /\b(SELECT|FROM|WHERE|AND|OR|NOT|IN|LIKE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET|ASC|DESC|NULLS\s+FIRST|NULLS\s+LAST|WITH|TYPEOF|USING\s+SCOPE|FOR\s+VIEW|FOR\s+REFERENCE|FOR\s+UPDATE|INCLUDES|EXCLUDES|ABOVE|AT|BELOW|ABOVE_OR_BELOW|ROLLUP|CUBE|TRUE|FALSE|NULL|LAST_N_DAYS|NEXT_N_DAYS|TODAY|YESTERDAY|TOMORROW|LAST_WEEK|THIS_WEEK|NEXT_WEEK|LAST_MONTH|THIS_MONTH|NEXT_MONTH|LAST_YEAR|THIS_YEAR|NEXT_YEAR|LAST_90_DAYS|NEXT_90_DAYS|LAST_N_MONTHS|NEXT_N_MONTHS|LAST_N_YEARS|NEXT_N_YEARS|COUNT|AVG|SUM|MIN|MAX|COUNT_DISTINCT|CALENDAR_MONTH|CALENDAR_YEAR|DAY_IN_MONTH|DAY_IN_WEEK|DAY_IN_YEAR|DAY_ONLY|HOUR_IN_DAY|FISCAL_MONTH|FISCAL_QUARTER|FISCAL_YEAR|WEEK_IN_MONTH|WEEK_IN_YEAR|toLabel|convertCurrency|FORMAT|DISTANCE|GEOLOCATION)\b/gi;
+  const SOQL_STRINGS = /'[^']*'/g;
+  const SOQL_NUMBERS = /\b\d+(\.\d+)?\b/g;
+  const SOQL_OPERATORS = /(\b(!=|<=|>=|<|>|=)\b|:)/g;
+
+  function _updateHighlight() {
+    const highlight = _container ? _container.querySelector('#soql-highlight') : null;
+    if (!highlight || !_editor) return;
+    const text = _editor.value;
+    if (!text) { highlight.innerHTML = '\n'; return; }
+
+    // Escape HTML first
+    let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Tokenize: protect strings first, then highlight keywords/numbers
+    const tokens = [];
+    html = html.replace(SOQL_STRINGS, m => { const id = `__STR${tokens.length}__`; tokens.push(`<span class="sfdt-hl-string">${m}</span>`); return id; });
+    html = html.replace(SOQL_KEYWORDS, m => `<span class="sfdt-hl-keyword">${m.toUpperCase()}</span>`);
+    html = html.replace(SOQL_NUMBERS, m => `<span class="sfdt-hl-number">${m}</span>`);
+    // Restore string tokens
+    tokens.forEach((t, i) => { html = html.replace(`__STR${i}__`, t); });
+
+    highlight.innerHTML = html + '\n';
+    // Sync scroll
+    highlight.scrollTop = _editor.scrollTop;
+    highlight.scrollLeft = _editor.scrollLeft;
+  }
+
+  function _onEditorInput() { _showAutocomplete(); _showFieldHintsIfNeeded(); _updateHighlight(); }
 
   let _fieldHintsCache = {};
 
@@ -362,6 +419,7 @@ const SOQLPanel = (() => {
         _editor.value = before + insert + after;
         _editor.selectionStart = _editor.selectionEnd = cursorPos + insert.length;
         _editor.focus();
+        _updateHighlight();
         _showFieldHintsIfNeeded();
       });
     });
@@ -451,16 +509,41 @@ const SOQLPanel = (() => {
     _editor.selectionStart = _editor.selectionEnd = wordStart + suggestion.text.length;
     _editor.focus();
     _hideAutocomplete();
+    _updateHighlight();
+  }
+
+  function _updateRunBadge(count) {
+    const runBtn = _container ? _container.querySelector('#soql-run') : null;
+    if (!runBtn) return;
+    const I = ICONS();
+    if (count != null && count > 0) {
+      runBtn.innerHTML = `${I.play} Run <span class="sfdt-run-badge">${count}</span>`;
+    } else {
+      runBtn.innerHTML = `${I.play} Run`;
+    }
+  }
+
+  function _isToolingObject(objName) {
+    return objName && TOOLING_OBJECTS.has(objName.toLowerCase());
   }
 
   async function _runQuery() {
     const soql = _editor.value.trim();
     if (!soql) return;
     _queriedSObjectType = _extractSObjectType(soql);
-    _isToolingQuery = false;
-    _statusBar.textContent = 'Executing query...';
-    _resultsContainer.innerHTML = '<div class="sfdt-soql-loading">Running query...</div>';
-    const result = await QS().executeQuery(soql);
+
+    // Auto-detect Tooling API objects
+    if (_isToolingObject(_queriedSObjectType)) {
+      _isToolingQuery = true;
+      _statusBar.textContent = `Executing tooling query (auto-detected ${_queriedSObjectType})...`;
+    } else {
+      _isToolingQuery = false;
+      _statusBar.textContent = 'Executing query...';
+    }
+
+    _updateRunBadge(null);
+    _resultsContainer.innerHTML = `<div class="sfdt-soql-loading">Running ${_isToolingQuery ? 'tooling ' : ''}query...</div>`;
+    const result = _isToolingQuery ? await QS().executeToolingQuery(soql) : await QS().executeQuery(soql);
     _displayResults(result);
   }
 
@@ -469,6 +552,7 @@ const SOQLPanel = (() => {
     if (!soql) return;
     _queriedSObjectType = _extractSObjectType(soql);
     _isToolingQuery = true;
+    _updateRunBadge(null);
     _statusBar.textContent = 'Executing tooling query...';
     _resultsContainer.innerHTML = '<div class="sfdt-soql-loading">Running tooling query...</div>';
     const result = await QS().executeToolingQuery(soql);
@@ -483,12 +567,14 @@ const SOQLPanel = (() => {
       </div>`;
       _statusBar.textContent = `Error (${result.executionTime}ms)`;
       _setExportEnabled(false);
+      _updateRunBadge(null);
       return;
     }
 
     _lastResults = result;
     _statusBar.textContent = `${result.totalSize} record${result.totalSize !== 1 ? 's' : ''} (${result.executionTime}ms)`;
     _setExportEnabled(result.records.length > 0);
+    _updateRunBadge(result.totalSize);
 
     if (result.records.length === 0) {
       _resultsContainer.innerHTML = '<div class="sfdt-soql-empty">No records returned</div>';
@@ -748,6 +834,7 @@ const SOQLPanel = (() => {
       .replace(/\bLIMIT\b/gi, '\nLIMIT')
       .replace(/\bOFFSET\b/gi, '\nOFFSET')
       .trim();
+    _updateHighlight();
   }
 
   function _saveFavorite() {
@@ -785,6 +872,7 @@ const SOQLPanel = (() => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.index, 10);
         _editor.value = EXAMPLE_QUERIES[idx].query;
+        _updateHighlight();
         _switchTab('editor');
         _container.querySelectorAll('.soql-tab').forEach(t => t.classList.remove('active'));
         _container.querySelector('[data-tab="editor"]').classList.add('active');
@@ -796,6 +884,7 @@ const SOQLPanel = (() => {
       item.addEventListener('click', () => {
         const idx = parseInt(item.dataset.index, 10);
         _editor.value = EXAMPLE_QUERIES[idx].query;
+        _updateHighlight();
         _switchTab('editor');
         _container.querySelectorAll('.soql-tab').forEach(t => t.classList.remove('active'));
         _container.querySelector('[data-tab="editor"]').classList.add('active');
@@ -837,6 +926,7 @@ const SOQLPanel = (() => {
     area.querySelectorAll('.fav-load').forEach(btn => {
       btn.addEventListener('click', () => {
         _editor.value = favs[parseInt(btn.dataset.index, 10)].query;
+        _updateHighlight();
         _switchTab('editor');
         _container.querySelectorAll('.soql-tab').forEach(t => t.classList.remove('active'));
         _container.querySelector('[data-tab="editor"]').classList.add('active');
@@ -915,6 +1005,7 @@ const SOQLPanel = (() => {
     area.querySelectorAll('.history-load').forEach(btn => {
       btn.addEventListener('click', () => {
         _editor.value = history[parseInt(btn.dataset.index, 10)].query;
+        _updateHighlight();
         _switchTab('editor');
         _container.querySelectorAll('.soql-tab').forEach(t => t.classList.remove('active'));
         _container.querySelector('[data-tab="editor"]').classList.add('active');
