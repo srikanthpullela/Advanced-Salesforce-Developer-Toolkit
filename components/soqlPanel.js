@@ -10,6 +10,7 @@ const SOQLPanel = (() => {
   let _container = null;
   let _panel = null;
   let _visible = false;
+  let _pinned = false;
   let _editor = null;
   let _resultsContainer = null;
   let _statusBar = null;
@@ -74,6 +75,7 @@ const SOQLPanel = (() => {
             <span class="sfdt-soql-divider">|</span>
             <button class="sfdt-btn sfdt-btn-sm" id="soql-newtab" title="Run query in browser via REST API">${I.maximize} Query API</button>
             <button class="sfdt-btn sfdt-btn-sm" id="soql-resize" title="Toggle size">${I.maximize}</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-pin-btn" id="soql-pin" title="Pin panel open">${I.pin}</button>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="soql-close" title="Close panel">${I.x} Close</button>
           </div>
         </div>
@@ -128,6 +130,7 @@ const SOQLPanel = (() => {
     _autocompleteDropdown = _container.querySelector('#soql-autocomplete');
 
     _container.querySelector('#soql-close').addEventListener('click', hide);
+    _container.querySelector('#soql-pin').addEventListener('click', _togglePin);
     _container.querySelector('#soql-run').addEventListener('click', _runQuery);
     _container.querySelector('#soql-tooling').addEventListener('click', _runToolingQuery);
     _container.querySelector('#soql-analyze').addEventListener('click', _analyzeQuery);
@@ -358,7 +361,13 @@ const SOQLPanel = (() => {
     highlight.scrollLeft = _editor.scrollLeft;
   }
 
-  function _onEditorInput() { _showAutocomplete(); _showFieldHintsIfNeeded(); _updateHighlight(); }
+  let _highlightTimer = null;
+  function _onEditorInput() {
+    _showAutocomplete();
+    _showFieldHintsIfNeeded();
+    clearTimeout(_highlightTimer);
+    _highlightTimer = setTimeout(_updateHighlight, 80);
+  }
 
   let _fieldHintsCache = {};
 
@@ -543,8 +552,18 @@ const SOQLPanel = (() => {
 
     _updateRunBadge(null);
     _resultsContainer.innerHTML = `<div class="sfdt-soql-loading">Running ${_isToolingQuery ? 'tooling ' : ''}query...</div>`;
-    const result = _isToolingQuery ? await QS().executeToolingQuery(soql) : await QS().executeQuery(soql);
-    _displayResults(result);
+    try {
+      const result = _isToolingQuery ? await QS().executeToolingQuery(soql) : await QS().executeQuery(soql);
+      _displayResults(result);
+    } catch (err) {
+      _resultsContainer.innerHTML = `<div class="sfdt-soql-error">
+        <div class="sfdt-soql-error-title">Query Error</div>
+        <div class="sfdt-soql-error-msg">${_esc(err && err.message ? err.message : String(err))}</div>
+      </div>`;
+      _statusBar.textContent = 'Error';
+      _setExportEnabled(false);
+      _updateRunBadge(null);
+    }
   }
 
   async function _runToolingQuery() {
@@ -555,8 +574,18 @@ const SOQLPanel = (() => {
     _updateRunBadge(null);
     _statusBar.textContent = 'Executing tooling query...';
     _resultsContainer.innerHTML = '<div class="sfdt-soql-loading">Running tooling query...</div>';
-    const result = await QS().executeToolingQuery(soql);
-    _displayResults(result);
+    try {
+      const result = await QS().executeToolingQuery(soql);
+      _displayResults(result);
+    } catch (err) {
+      _resultsContainer.innerHTML = `<div class="sfdt-soql-error">
+        <div class="sfdt-soql-error-title">Query Error</div>
+        <div class="sfdt-soql-error-msg">${_esc(err && err.message ? err.message : String(err))}</div>
+      </div>`;
+      _statusBar.textContent = 'Error';
+      _setExportEnabled(false);
+      _updateRunBadge(null);
+    }
   }
 
   function _displayResults(result) {
@@ -1167,13 +1196,13 @@ const SOQLPanel = (() => {
             const fullData = await API.restGet(`/sobjects/${_queriedSObjectType}/${recordId}?fields=${fetchFields}`);
             fullRecord = fullData;
           } catch (fetchErr) {
-            console.debug('[SFDT] Full record fetch failed, using query data:', fetchErr.message);
+            window._sfdtLogger.debug('[SFDT] Full record fetch failed, using query data:', fetchErr.message);
           }
         }
       }
     } catch (err) {
       // Fallback to query keys if describe fails
-      console.debug('[SFDT] Describe failed:', err.message);
+      window._sfdtLogger.debug('[SFDT] Describe failed:', err.message);
       const editableKeys = _getEditableKeys(keys);
       allFields = editableKeys.map(k => ({ name: k, label: k, type: 'string', nillable: true }));
     }
@@ -1345,8 +1374,18 @@ const SOQLPanel = (() => {
 
   function toggle() { _visible ? hide() : show(); }
   function isVisible() { return _visible; }
+  function isPinned() { return _pinned; }
 
-  return { show, hide, toggle, isVisible };
+  function _togglePin() {
+    _pinned = !_pinned;
+    const btn = _container.querySelector('#soql-pin');
+    if (btn) {
+      btn.classList.toggle('sfdt-btn-active', _pinned);
+      btn.title = _pinned ? 'Unpin panel' : 'Pin panel open';
+    }
+  }
+
+  return { show, hide, toggle, isVisible, isPinned };
 })();
 
 if (typeof window !== 'undefined') window.SFDTSOQLPanel = SOQLPanel;

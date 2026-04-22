@@ -26,7 +26,7 @@ const MetadataService = (() => {
     try {
       const stored = localStorage.getItem(CACHE_VERSION_KEY);
       if (stored !== CURRENT_CACHE_VERSION) {
-        console.log('[SFDT] Cache version mismatch — clearing stale cache.');
+        window._sfdtLogger.log('[SFDT] Cache version mismatch — clearing stale cache.');
         CACHE.clearNamespace('metadata');
         CACHE.clearNamespace('index');
         localStorage.setItem(CACHE_VERSION_KEY, CURRENT_CACHE_VERSION);
@@ -66,9 +66,9 @@ const MetadataService = (() => {
       };
       chrome.storage.local.set({ [key]: payload }, () => {
         if (chrome.runtime.lastError) {
-          console.debug('[SFDT] Failed to save index to storage:', chrome.runtime.lastError.message);
+          window._sfdtLogger.debug('[SFDT] Failed to save index to storage:', chrome.runtime.lastError.message);
         } else {
-          console.debug('[SFDT] Index saved to chrome.storage.local key:', key);
+          window._sfdtLogger.debug('[SFDT] Index saved to chrome.storage.local key:', key);
         }
       });
     } catch { /* ignore */ }
@@ -90,16 +90,16 @@ const MetadataService = (() => {
 
           // Validate: same cache version, not expired
           if (entry.version !== CURRENT_CACHE_VERSION) {
-            console.debug('[SFDT] Cached index version mismatch, will rebuild.');
+            window._sfdtLogger.debug('[SFDT] Cached index version mismatch, will rebuild.');
             return resolve(null);
           }
           if (Date.now() - entry.ts > INDEX_CACHE_TTL) {
-            console.debug('[SFDT] Cached index expired, will rebuild.');
+            window._sfdtLogger.debug('[SFDT] Cached index expired, will rebuild.');
             return resolve(null);
           }
 
           const count = Object.values(entry.data).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
-          console.log(`[SFDT] Loaded cached index for org (${key}): ${count} items (age: ${Math.round((Date.now() - entry.ts) / 1000)}s)`);
+          window._sfdtLogger.log(`[SFDT] Loaded cached index for org (${key}): ${count} items (age: ${Math.round((Date.now() - entry.ts) / 1000)}s)`);
           resolve(entry.data);
         });
       } catch {
@@ -465,36 +465,49 @@ const MetadataService = (() => {
 
   // ─── Full Index Builder ────────────────────────────────
 
+  let _indexingPromise = null;
+
   async function buildIndex() {
-    if (_indexing) return _metadataIndex;
-    _indexing = true;
-    _indexReady = false;
+    // If a build is already in progress, return the same promise so concurrent
+    // callers await the same work instead of getting a half-built index.
+    if (_indexingPromise) return _indexingPromise;
 
-    // Verify API connection first
-    if (!API.isConnected()) {
-      console.debug('[SFDT] Cannot build index — not connected to Salesforce.');
-      _indexing = false;
-      return _metadataIndex;
-    }
+    _indexingPromise = (async () => {
+      _indexing = true;
+      _indexReady = false;
 
-    // Try to load cached index from chrome.storage.local (instant, cross-domain)
-    const cachedIndex = await _loadIndexFromStorage();
-    if (cachedIndex) {
-      const count = Object.values(cachedIndex).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
-      if (count > 0) {
-        _metadataIndex = cachedIndex;
-        _indexReady = true;
-        _notifyReady();
-        console.log('[SFDT] Index ready from cache. Refreshing in background...');
-        // Refresh in background (non-blocking) so data stays fresh
+      // Verify API connection first
+      if (!API.isConnected()) {
+        window._sfdtLogger.debug('[SFDT] Cannot build index — not connected to Salesforce.');
         _indexing = false;
-        _refreshIndexInBackground();
         return _metadataIndex;
       }
-    }
 
-    // No cached index — build from scratch
-    return await _buildIndexFresh();
+      // Try to load cached index from chrome.storage.local (instant, cross-domain)
+      const cachedIndex = await _loadIndexFromStorage();
+      if (cachedIndex) {
+        const count = Object.values(cachedIndex).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
+        if (count > 0) {
+          _metadataIndex = cachedIndex;
+          _indexReady = true;
+          _notifyReady();
+          window._sfdtLogger.log('[SFDT] Index ready from cache. Refreshing in background...');
+          // Refresh in background (non-blocking) so data stays fresh
+          _indexing = false;
+          _refreshIndexInBackground();
+          return _metadataIndex;
+        }
+      }
+
+      // No cached index — build from scratch
+      return await _buildIndexFresh();
+    })();
+
+    try {
+      return await _indexingPromise;
+    } finally {
+      _indexingPromise = null;
+    }
   }
 
   /**
@@ -512,7 +525,7 @@ const MetadataService = (() => {
       // Verify session is still valid
       await API.restGet('/limits/');
     } catch (e) {
-      console.debug('[SFDT] Session invalid, skipping background refresh:', e.message);
+      window._sfdtLogger.debug('[SFDT] Session invalid, skipping background refresh:', e.message);
       _indexing = false;
       return;
     }
@@ -520,13 +533,13 @@ const MetadataService = (() => {
     // Clear localStorage cache so fetchers hit the API for fresh data
     CACHE.clearNamespace('metadata');
 
-    console.debug('[SFDT] Background index refresh started...');
+    window._sfdtLogger.debug('[SFDT] Background index refresh started...');
     const index = await _fetchAllMetadata();
     if (index && Object.keys(index).length > 0) {
       _metadataIndex = index;
       _saveIndexToStorage(index);
       const count = Object.values(index).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
-      console.log('[SFDT] Background index refresh complete:', count, 'items');
+      window._sfdtLogger.log('[SFDT] Background index refresh complete:', count, 'items');
     }
     _indexing = false;
   }
@@ -539,7 +552,7 @@ const MetadataService = (() => {
     try {
       await API.restGet('/limits/');
     } catch (e) {
-      console.debug('[SFDT] Session invalid, skipping index build:', e.message);
+      window._sfdtLogger.debug('[SFDT] Session invalid, skipping index build:', e.message);
       _indexing = false;
       return _metadataIndex;
     }
@@ -550,7 +563,7 @@ const MetadataService = (() => {
     _indexing = false;
     _notifyReady();
     _saveIndexToStorage(index);
-    console.log('[SFDT] Index built with categories:', Object.keys(index).join(', '),
+    window._sfdtLogger.log('[SFDT] Index built with categories:', Object.keys(index).join(', '),
       'Total items:', Object.values(index).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0));
     return index;
   }
@@ -573,7 +586,7 @@ const MetadataService = (() => {
         fetchValidationRules().catch(() => []),
         fetchCustomObjects().catch(() => [])
       ]);
-      console.log('[SFDT] Batch 1 fetched:', { classes: classes.length, triggers: triggers.length, vfPages: vfPages.length, lwc: lwc.length, aura: aura.length, flows: flows.length, valRules: valRules.length, objects: objects.length });
+      window._sfdtLogger.log('[SFDT] Batch 1 fetched:', { classes: classes.length, triggers: triggers.length, vfPages: vfPages.length, lwc: lwc.length, aura: aura.length, flows: flows.length, valRules: valRules.length, objects: objects.length });
 
       index.apexClasses = classes.map(c => ({
         id: c.Id,
@@ -653,7 +666,7 @@ const MetadataService = (() => {
         queryable: o.queryable
       }));
     } catch (e) {
-      console.debug('[SFDT] Index build error (batch 1):', e);
+      window._sfdtLogger.debug('[SFDT] Index build error (batch 1):', e);
     }
 
     // Batch 2 — secondary metadata
@@ -700,7 +713,7 @@ const MetadataService = (() => {
         devName: d.DeveloperName
       }));
     } catch (e) {
-      console.debug('[SFDT] Index build error (batch 2):', e);
+      window._sfdtLogger.debug('[SFDT] Index build error (batch 2):', e);
     }
 
     // Batch 3 — remaining metadata
@@ -762,40 +775,94 @@ const MetadataService = (() => {
         field: a.Apttus_Config2__Field__c || ''
       }));
     } catch (e) {
-      console.debug('[SFDT] Index build error (batch 3):', e);
+      window._sfdtLogger.debug('[SFDT] Index build error (batch 3):', e);
     }
 
     // Setup page shortcuts (always available, no API call needed)
+    // Setup pages use setupId for dynamic URL resolution.
+    // Classic URLs are built dynamically via _getClassicSetupUrl using
+    // /ui/setup/Setup?setupid=XXX (Salesforce's stable redirect pattern)
+    // so they never break when Salesforce changes internal page paths.
     index.setupPages = [
-      { name: 'Apex Classes', path: '/lightning/setup/ApexClasses/home', classicPath: '/setup/build/listApexClass.apexp' },
-      { name: 'Apex Triggers', path: '/lightning/setup/ApexTriggers/home', classicPath: '/setup/build/listApexTrigger.apexp' },
-      { name: 'Auth Providers', path: '/lightning/setup/AuthProvidersPage/home', classicPath: '/setup/secur/AuthProviderPage.apexp' },
-      { name: 'Connected Apps', path: '/lightning/setup/ConnectedApplication/home', classicPath: '/app/mgmt/forceconnectedapps/forceAppList.apexp' },
-      { name: 'Custom Labels', path: '/lightning/setup/ExternalStrings/home', classicPath: '/101?setupid=ExternalStrings' },
-      { name: 'Custom Metadata Types', path: '/lightning/setup/CustomMetadata/home', classicPath: '/setup/ui/listCustomMetadata.apexp' },
-      { name: 'Custom Settings', path: '/lightning/setup/CustomSettings/home', classicPath: '/setup/ui/listCustomSettings.apexp' },
-      { name: 'Data Loader', path: '/lightning/setup/DataManagementDataLoader/home', classicPath: '/ui/setup/dataimporter/DataImporterPage' },
-      { name: 'Debug Logs', path: '/lightning/setup/ApexDebugLogs/home', classicPath: '/setup/ui/listApexTraces.apexp' },
-      { name: 'Deployment Status', path: '/lightning/setup/DeployStatus/home', classicPath: '/changemgmt/monitorDeployment.apexp' },
-      { name: 'Developer Console', path: '/_ui/common/apex/debug/ApexCSIPage', classicPath: '/_ui/common/apex/debug/ApexCSIPage' },
-      { name: 'Email Templates', path: '/lightning/setup/CommunicationTemplatesEmail/home', classicPath: '/email/admin/listEmailTemplate.apexp' },
-      { name: 'Flows', path: '/lightning/setup/Flows/home', classicPath: '/300' },
-      { name: 'Installed Packages', path: '/lightning/setup/ImportedPackage/home', classicPath: '/0A3' },
-      { name: 'Lightning Components', path: '/lightning/setup/LightningComponentBundles/home', classicPath: '/setup/build/listLightningComponentBundle.apexp' },
-      { name: 'Named Credentials', path: '/lightning/setup/NamedCredential/home', classicPath: '/0XA' },
-      { name: 'Object Manager', path: '/lightning/setup/ObjectManager/home', classicPath: '/p/setup/custent/CustomObjectsPage?setupid=CustomObjects' },
-      { name: 'Permission Sets', path: '/lightning/setup/PermSets/home', classicPath: '/0PS' },
-      { name: 'Platform Events', path: '/lightning/setup/EventObjects/home', classicPath: '/setup/build/listEventObjects.apexp' },
-      { name: 'Profiles', path: '/lightning/setup/Profiles/home', classicPath: '/00e' },
-      { name: 'Remote Site Settings', path: '/lightning/setup/SecurityRemoteProxy/home', classicPath: '/0rp' },
-      { name: 'Scheduled Jobs', path: '/lightning/setup/ScheduledJobs/home', classicPath: '/08e' },
-      { name: 'Static Resources', path: '/lightning/setup/StaticResources/home', classicPath: '/setup/build/listStaticResource.apexp' },
-      { name: 'Tabs', path: '/lightning/setup/Tabs/home', classicPath: '/setup/ui/listTabs.apexp' },
-      { name: 'Users', path: '/lightning/setup/ManageUsers/home', classicPath: '/005' },
-      { name: 'Visualforce Pages', path: '/lightning/setup/ApexPages/home', classicPath: '/setup/build/listApexPage.apexp' }
+      // Development
+      { name: 'Apex Classes', setupId: 'ApexClasses' },
+      { name: 'Apex Triggers', setupId: 'ApexTriggers' },
+      { name: 'Visualforce Pages', setupId: 'ApexPages' },
+      { name: 'Visualforce Components', setupId: 'ApexComponents' },
+      { name: 'Lightning Components', setupId: 'LightningComponentBundles' },
+      { name: 'Static Resources', setupId: 'StaticResources' },
+      { name: 'Platform Events', setupId: 'EventObjects' },
+      { name: 'Custom Metadata Types', setupId: 'CustomMetadata' },
+      { name: 'Custom Settings', setupId: 'CustomSettings' },
+      { name: 'Custom Labels', setupId: 'ExternalStrings' },
+      { name: 'Custom Permissions', setupId: 'CustomPermissions' },
+
+      // Automation
+      { name: 'Flows', setupId: 'Flows' },
+      { name: 'Process Builder', setupId: 'ProcessAutomation' },
+      { name: 'Workflow Rules', setupId: 'WorkflowRules' },
+      { name: 'Approval Processes', setupId: 'ApprovalProcesses' },
+      { name: 'Scheduled Jobs', setupId: 'ScheduledJobs' },
+      { name: 'Apex Jobs', setupId: 'AsyncApexJobs' },
+
+      // Deployment & Packages
+      { name: 'Deployment Status', setupId: 'DeployStatus' },
+      { name: 'Installed Packages', setupId: 'ImportedPackage' },
+      { name: 'Change Sets (Outbound)', setupId: 'OutboundChangeSet' },
+      { name: 'Change Sets (Inbound)', setupId: 'InboundChangeSet' },
+
+      // Security & Access
+      { name: 'Profiles', setupId: 'Profiles' },
+      { name: 'Permission Sets', setupId: 'PermSets' },
+      { name: 'Permission Set Groups', setupId: 'PermSetGroups' },
+      { name: 'Users', setupId: 'ManageUsers' },
+      { name: 'Roles', setupId: 'Roles' },
+      { name: 'Sharing Settings', setupId: 'SecuritySharing' },
+      { name: 'Login History', setupId: 'OrgLoginHistory' },
+      { name: 'Session Management', setupId: 'SessionManagement' },
+      { name: 'Auth Providers', setupId: 'AuthProvidersPage' },
+      { name: 'Connected Apps', setupId: 'ConnectedApplication' },
+      { name: 'Named Credentials', setupId: 'NamedCredential' },
+      { name: 'Remote Site Settings', setupId: 'SecurityRemoteProxy' },
+      { name: 'CORS', setupId: 'CorsWhitelistEntries' },
+      { name: 'Certificates & Key Management', setupId: 'CertificatesAndKeysManagement' },
+
+      // Data & Integration
+      { name: 'Object Manager', setupId: 'ObjectManager' },
+      { name: 'Data Loader', setupId: 'DataManagementDataLoader' },
+      { name: 'Storage Usage', setupId: 'CompanyResourceDisk' },
+      { name: 'Schema Builder', setupId: 'SchemaBuilder' },
+      { name: 'API Usage', setupId: 'ApiUsageNotifications' },
+
+      // Email & Notifications
+      { name: 'Email Templates', setupId: 'CommunicationTemplatesEmail' },
+      { name: 'Organization-Wide Addresses', setupId: 'OrgWideEmailAddresses' },
+      { name: 'Email Deliverability', setupId: 'OrgEmailSettings' },
+
+      // UI & Navigation
+      { name: 'Tabs', setupId: 'Tabs' },
+      { name: 'App Manager', setupId: 'NavigationMenus' },
+      { name: 'Lightning App Builder', setupId: 'FlexiPageList' },
+      { name: 'Page Layouts', setupId: 'PageLayouts' },
+      { name: 'Record Types', setupId: 'RecordTypes' },
+      { name: 'Global Actions', setupId: 'GlobalActions' },
+
+      // Monitoring & Logs
+      { name: 'Debug Logs', setupId: 'ApexDebugLogs' },
+      { name: 'Email Logs', setupId: 'EmailLogFiles' },
+      { name: 'Setup Audit Trail', setupId: 'SecurityEvents' },
+
+      // Tools
+      { name: 'Developer Console', setupId: 'DeveloperConsole', path: '/_ui/common/apex/debug/ApexCSIPage', classicPath: '/_ui/common/apex/debug/ApexCSIPage' },
+      { name: 'Rename Tabs and Labels', setupId: 'RenameTab' },
+      { name: 'Company Information', setupId: 'CompanyProfileInfo' },
+      { name: 'My Domain', setupId: 'OrgDomain' },
+      { name: 'Sandboxes', setupId: 'DataManagementCreateTestInstance' },
     ].map(s => ({
       name: s.name, type: 'SetupPage', icon: '\u2699', label: s.name,
-      path: s.path, classicPath: s.classicPath
+      setupId: s.setupId,
+      path: s.path || `/lightning/setup/${s.setupId}/home`,
+      classicPath: s.classicPath || `/ui/setup/Setup?setupid=${s.setupId}`
     }));
 
     return index;

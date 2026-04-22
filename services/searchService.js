@@ -213,9 +213,9 @@ const SearchService = (() => {
         });
       }
 
-      console.log(`[SFDT] SOSL code search "${query.substring(0, 40)}": ${results.length} results`);
+      window._sfdtLogger.log(`[SFDT] SOSL code search "${query.substring(0, 40)}": ${results.length} results`);
     } catch (e) {
-      console.debug('[SFDT] SOSL code search failed:', e.message);
+      window._sfdtLogger.debug('[SFDT] SOSL code search failed:', e.message);
     }
 
     // Search Aura/LWC components by name via Tooling SOQL (they don't support SOSL)
@@ -247,7 +247,7 @@ const SearchService = (() => {
           });
         }
       } catch (e) {
-        console.debug(`[SFDT] ${search.type} name search failed:`, e.message);
+        window._sfdtLogger.debug(`[SFDT] ${search.type} name search failed:`, e.message);
       }
     }));
 
@@ -316,7 +316,7 @@ const SearchService = (() => {
       }
     }
 
-    console.log('[SFDT] Deep code body search completed');
+    window._sfdtLogger.log('[SFDT] Deep code body search completed');
   }
 
   // ─── ID-Based Record Lookup ──────────────────────────
@@ -341,11 +341,11 @@ const SearchService = (() => {
     const obj = allObjects.find(o => o.keyPrefix === keyPrefix);
 
     if (!obj || !obj.queryable) {
-      console.log(`[SFDT] ID lookup: no object found for key prefix "${keyPrefix}"`);
+      window._sfdtLogger.log(`[SFDT] ID lookup: no object found for key prefix "${keyPrefix}"`);
       return [];
     }
 
-    console.log(`[SFDT] ID lookup: ${recordId} → ${obj.name} (prefix ${keyPrefix})`);
+    window._sfdtLogger.log(`[SFDT] ID lookup: ${recordId} → ${obj.name} (prefix ${keyPrefix})`);
 
     try {
       const soql = `SELECT Id, Name FROM ${obj.name} WHERE Id = '${recordId}' LIMIT 1`;
@@ -366,7 +366,7 @@ const SearchService = (() => {
         };
       });
     } catch (e) {
-      console.debug(`[SFDT] ID lookup failed for ${obj.name}:`, e.message);
+      window._sfdtLogger.debug(`[SFDT] ID lookup failed for ${obj.name}:`, e.message);
       return [];
     }
   }
@@ -564,8 +564,8 @@ const SearchService = (() => {
       .map(o => o.name)
       .slice(0, 50);
 
-    console.log(`[SFDT] Dynamic search: ${dynamicObjs.length} objects to query (${allObjects.length} total, ${alreadyCovered.size} covered)`);
-    if (dynamicObjs.length > 0) console.log('[SFDT] Dynamic objects:', dynamicObjs.slice(0, 10).join(', '), dynamicObjs.length > 10 ? `... +${dynamicObjs.length - 10} more` : '');
+    window._sfdtLogger.log(`[SFDT] Dynamic search: ${dynamicObjs.length} objects to query (${allObjects.length} total, ${alreadyCovered.size} covered)`);
+    if (dynamicObjs.length > 0) window._sfdtLogger.log('[SFDT] Dynamic objects:', dynamicObjs.slice(0, 10).join(', '), dynamicObjs.length > 10 ? `... +${dynamicObjs.length - 10} more` : '');
 
     if (dynamicObjs.length === 0) return;
 
@@ -634,7 +634,7 @@ const SearchService = (() => {
       const response = await API.globalSearch(sosl);
       return _parseSoslResults(response, maxResults);
     } catch (e1) {
-      console.debug('[SFDT] Full SOSL search failed:', e1.message, '— retrying with standard objects only');
+      window._sfdtLogger.debug('[SFDT] Full SOSL search failed:', e1.message, '— retrying with standard objects only');
     }
 
     // Attempt 2: Standard objects only — single fallback to keep it fast
@@ -643,7 +643,7 @@ const SearchService = (() => {
       const response = await API.globalSearch(sosl2);
       return _parseSoslResults(response, maxResults);
     } catch (e2) {
-      console.debug('[SFDT] Standard SOSL search also failed:', e2.message);
+      window._sfdtLogger.debug('[SFDT] Standard SOSL search also failed:', e2.message);
     }
 
     return [];
@@ -674,7 +674,7 @@ const SearchService = (() => {
       });
     }
 
-    console.log(`[SFDT] Record search: ${results.length} results`);
+    window._sfdtLogger.log(`[SFDT] Record search: ${results.length} results`);
     return results.slice(0, maxResults);
   }
 
@@ -809,7 +809,7 @@ const SearchService = (() => {
           });
         }
       } catch (err) {
-        console.debug('[SFDT] EntityParticle label search failed for batch:', err.message);
+        window._sfdtLogger.debug('[SFDT] EntityParticle label search failed for batch:', err.message);
       }
 
       // Also search by API name
@@ -835,7 +835,7 @@ const SearchService = (() => {
           });
         }
       } catch (err) {
-        console.debug('[SFDT] EntityParticle apiName search failed for batch:', err.message);
+        window._sfdtLogger.debug('[SFDT] EntityParticle apiName search failed for batch:', err.message);
       }
     }
 
@@ -865,7 +865,7 @@ const SearchService = (() => {
         };
       });
     } catch (err) {
-      console.debug('[SFDT] CustomField search also failed:', err.message);
+      window._sfdtLogger.debug('[SFDT] CustomField search also failed:', err.message);
     }
 
     return [];

@@ -85,7 +85,7 @@ const SalesforceAPI = (() => {
       const discovered = _discoverInstanceFromPage();
       if (discovered) {
         _instanceUrl = discovered;
-        console.debug('[SFDT] Instance discovered from page globals:', _instanceUrl);
+        window._sfdtLogger.debug('[SFDT] Instance discovered from page globals:', _instanceUrl);
         return _instanceUrl;
       }
 
@@ -164,7 +164,7 @@ const SalesforceAPI = (() => {
             if (response && response.sessionId) {
               _sessionId = response.sessionId;
               if (response.orgId) _orgId = response.orgId;
-              console.log('[SFDT] Session obtained via chrome.cookies');
+              window._sfdtLogger.log('[SFDT] Session obtained via chrome.cookies');
             } else {
               _tryFallbackSession();
             }
@@ -191,7 +191,7 @@ const SalesforceAPI = (() => {
     const sidCookie = cookies.find(c => c.startsWith('sid='));
     if (sidCookie) {
       _sessionId = sidCookie.split('=')[1];
-      console.log('[SFDT] Session obtained via document.cookie');
+      window._sfdtLogger.log('[SFDT] Session obtained via document.cookie');
       return;
     }
 
@@ -203,13 +203,13 @@ const SalesforceAPI = (() => {
         const tokenMatch = text.match(/"token"\s*:\s*"([^"]+)"/);
         if (tokenMatch && tokenMatch[1].length > 20) {
           _sessionId = tokenMatch[1];
-          console.log('[SFDT] Session obtained via Aura config');
+          window._sfdtLogger.log('[SFDT] Session obtained via Aura config');
           return;
         }
       }
     } catch { /* ignore */ }
 
-    console.debug('[SFDT] Could not obtain session token');
+    window._sfdtLogger.debug('[SFDT] Could not obtain session token');
   }
 
   let _reconnectPromise = null;
@@ -447,7 +447,7 @@ const SalesforceAPI = (() => {
     } catch (err) {
       // If the normal fetch fails on cross-origin (Classic/VF), retry with explicit GET
       if (_isCrossOrigin()) {
-        console.debug('[SFDT] executeAnonymous retry via proxy:', err.message);
+        window._sfdtLogger.debug('[SFDT] executeAnonymous retry via proxy:', err.message);
         const base = getInstanceUrl();
         const url = `${base}${path}`;
         const headers = {

@@ -7,6 +7,6 @@ chrome.devtools.panels.create(
   null, // icon path
   'devtools/panel.html',
   (panel) => {
-    console.log('[SFDT] DevTools Salesforce panel created.');
+    window._sfdtLogger.log('[SFDT] DevTools Salesforce panel created.');
   }
 );

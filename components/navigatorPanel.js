@@ -229,7 +229,7 @@ const NavigatorPanel = (() => {
       const codeNote = newCodeResults.length > 0 ? ` + ${newCodeResults.length} code` : '';
       statusText.textContent = `${_currentResults.length} result${_currentResults.length !== 1 ? 's' : ''}${codeNote}`;
     } catch (e) {
-      console.debug('[SFDT] Navigator code search error:', e.message);
+      window._sfdtLogger.debug('[SFDT] Navigator code search error:', e.message);
     }
   }
 
@@ -375,7 +375,7 @@ const NavigatorPanel = (() => {
       _renderDrilldown();
       statusText.textContent = `${_drilldownAllItems.length} ${categoryName}`;
     } catch (e) {
-      console.debug('[SFDT] Drilldown fetch error:', e.message);
+      window._sfdtLogger.debug('[SFDT] Drilldown fetch error:', e.message);
       _resultsList.innerHTML = `<div class="sfdt-empty">Failed to load ${_esc(categoryName)}</div>`;
       statusText.textContent = 'Error loading items';
     }

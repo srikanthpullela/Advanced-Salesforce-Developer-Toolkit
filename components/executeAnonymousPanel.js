@@ -10,6 +10,7 @@ const ExecuteAnonymousPanel = (() => {
   let _container = null;
   let _panel = null;
   let _visible = false;
+  let _pinned = false;
   const STORAGE_KEY = 'sfdt_exec_snippets';
   const HISTORY_KEY = 'sfdt_exec_history';
 
@@ -31,6 +32,7 @@ const ExecuteAnonymousPanel = (() => {
             <button class="sfdt-btn sfdt-btn-sm" id="ea-snippets-btn" title="Saved Snippets">${I.list} Snippets</button>
             <button class="sfdt-btn sfdt-btn-sm" id="ea-history-btn" title="Execution History">${I.clock} History</button>
             <button class="sfdt-btn sfdt-btn-sm" id="ea-resize" title="Toggle size">${I.maximize}</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-pin-btn" id="ea-pin" title="Pin panel open">${I.pin}</button>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="ea-close">${I.x} Close</button>
           </div>
         </div>
@@ -91,6 +93,7 @@ const ExecuteAnonymousPanel = (() => {
     const codeEl = _container.querySelector('#ea-code');
 
     _container.querySelector('#ea-close').addEventListener('click', hide);
+    _container.querySelector('#ea-pin').addEventListener('click', _togglePin);
     _container.querySelector('#ea-run').addEventListener('click', _execute);
     _container.querySelector('#ea-clear').addEventListener('click', () => { codeEl.value = ''; codeEl.focus(); });
     _container.querySelector('#ea-save').addEventListener('click', _saveSnippet);
@@ -210,11 +213,11 @@ const ExecuteAnonymousPanel = (() => {
     } catch (err) {
       // If one already exists with overlapping dates, that's fine — we'll get logs anyway
       if (err.message && err.message.includes('already being traced')) {
-        console.debug('[SFDT] Trace flag already exists, continuing');
+        window._sfdtLogger.debug('[SFDT] Trace flag already exists, continuing');
         return 'existing';
       }
       // For other errors, log but don't block execution
-      console.debug('[SFDT] Trace flag creation failed:', err.message);
+      window._sfdtLogger.debug('[SFDT] Trace flag creation failed:', err.message);
       return null;
     }
   }
@@ -319,7 +322,7 @@ const ExecuteAnonymousPanel = (() => {
           }
         }
       } catch (logErr) {
-        console.debug('[SFDT] Debug log fetch error:', logErr.message);
+        window._sfdtLogger.debug('[SFDT] Debug log fetch error:', logErr.message);
         if (success) {
           statusEl.textContent = 'Success ✓ — could not fetch debug log';
           statusEl.className = 'sfdt-execanon-status success';
@@ -504,8 +507,18 @@ const ExecuteAnonymousPanel = (() => {
 
   function toggle() { _visible ? hide() : show(); }
   function isVisible() { return _visible; }
+  function isPinned() { return _pinned; }
 
-  return { show, hide, toggle, isVisible };
+  function _togglePin() {
+    _pinned = !_pinned;
+    const btn = _container.querySelector('#ea-pin');
+    if (btn) {
+      btn.classList.toggle('sfdt-btn-active', _pinned);
+      btn.title = _pinned ? 'Unpin panel' : 'Pin panel open';
+    }
+  }
+
+  return { show, hide, toggle, isVisible, isPinned };
 })();
 
 if (typeof window !== 'undefined') window.SFDTExecuteAnonymousPanel = ExecuteAnonymousPanel;

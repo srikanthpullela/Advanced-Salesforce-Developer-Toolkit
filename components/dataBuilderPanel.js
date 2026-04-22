@@ -182,7 +182,7 @@ const DataBuilderPanel = (() => {
       _describeCache[objectName] = fields;
       return fields;
     } catch (e) {
-      console.debug('[SFDT] Describe failed for', objectName, e.message);
+      window._sfdtLogger.debug('[SFDT] Describe failed for', objectName, e.message);
       return null;
     }
   }
@@ -203,7 +203,7 @@ const DataBuilderPanel = (() => {
       });
       return _existingGroupsCache;
     } catch (e) {
-      console.debug('[SFDT] Could not fetch option groups', e.message);
+      window._sfdtLogger.debug('[SFDT] Could not fetch option groups', e.message);
       return [];
     }
   }

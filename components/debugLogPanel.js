@@ -11,6 +11,7 @@ const DebugLogPanel = (() => {
   let _container = null;
   let _panel = null;
   let _visible = false;
+  let _pinned = false;
   let _autoRefreshTimer = null;
   let _currentLogId = null;
   let _logFilter = 'all';
@@ -35,6 +36,7 @@ const DebugLogPanel = (() => {
             <button class="sfdt-btn sfdt-btn-sm" id="dl-auto" title="Auto-refresh every 5s">${I.clock} Auto</button>
             <button class="sfdt-btn sfdt-btn-sm" id="dl-clear" title="Delete All Logs">${I.x} Clear</button>
             <button class="sfdt-btn sfdt-btn-sm" id="dl-toggle-size" title="Toggle Size">${I.maximize}</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-pin-btn" id="dl-pin" title="Pin panel open">${I.pin}</button>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="dl-close">${I.x}</button>
           </div>
         </div>
@@ -91,6 +93,7 @@ const DebugLogPanel = (() => {
     _panel = _container.querySelector('#sfdt-debuglog');
 
     _container.querySelector('#dl-close').addEventListener('click', hide);
+    _container.querySelector('#dl-pin').addEventListener('click', _togglePin);
     _container.querySelector('#dl-refresh').addEventListener('click', _loadLogs);
     _container.querySelector('#dl-auto').addEventListener('click', _toggleAutoRefresh);
     _container.querySelector('#dl-clear').addEventListener('click', _clearLogs);
@@ -1084,7 +1087,7 @@ const DebugLogPanel = (() => {
       }
       _loadLogs();
     } catch (err) {
-      console.debug('[SFDT] Clear logs error:', err.message);
+      window._sfdtLogger.debug('[SFDT] Clear logs error:', err.message);
     }
   }
 
@@ -1163,8 +1166,18 @@ const DebugLogPanel = (() => {
 
   function toggle() { _visible ? hide() : show(); }
   function isVisible() { return _visible; }
+  function isPinned() { return _pinned; }
 
-  return { show, hide, toggle, isVisible };
+  function _togglePin() {
+    _pinned = !_pinned;
+    const btn = _container.querySelector('#dl-pin');
+    if (btn) {
+      btn.classList.toggle('sfdt-btn-active', _pinned);
+      btn.title = _pinned ? 'Unpin panel' : 'Pin panel open';
+    }
+  }
+
+  return { show, hide, toggle, isVisible, isPinned };
 })();
 
 if (typeof window !== 'undefined') window.SFDTDebugLogPanel = DebugLogPanel;

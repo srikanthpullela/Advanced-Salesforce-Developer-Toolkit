@@ -546,6 +546,74 @@ svg {
   flex-shrink: 0;
 }
 
+.sfdt-result-pin,
+.sfdt-unpin-btn {
+  background: none;
+  border: none;
+  color: var(--fg3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sfdt-result-pin svg,
+.sfdt-unpin-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.sfdt-result:hover .sfdt-result-pin,
+.sfdt-result:hover .sfdt-unpin-btn,
+.sfdt-result-pin.pinned {
+  opacity: 1;
+}
+.sfdt-result-pin.pinned {
+  color: #f9e2af;
+}
+.sfdt-result-pin:hover {
+  color: #f9e2af;
+  background: var(--bg3);
+}
+.sfdt-unpin-btn:hover {
+  color: #f38ba8;
+  background: var(--bg3);
+}
+
+.sfdt-impact-btn {
+  background: none;
+  border: none;
+  color: var(--fg3);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  margin-left: 4px;
+  vertical-align: middle;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sfdt-impact-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.sfdt-field-row:hover .sfdt-impact-btn {
+  opacity: 1;
+}
+.sfdt-impact-btn:hover {
+  color: var(--accent, #89b4fa);
+  background: var(--bg3);
+}
+
 .sfdt-show-more {
   padding: 12px 16px;
   text-align: center;
@@ -1280,6 +1348,9 @@ mark.sfdt-highlight {
 .sfdt-td-diff { text-align: center; min-width: 60px; }
 .sfdt-btn-active { background: rgba(203,166,247,0.2) !important; border-color: rgba(203,166,247,0.4) !important; color: #cba6f7 !important; }
 
+.sfdt-pin-btn { position: relative; }
+.sfdt-pin-btn.sfdt-btn-active::after { content: ''; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; background: #a6e3a1; border-radius: 50%; }
+
 .sfdt-inline-input {
   width: 100%;
   background: var(--bg3) !important;
@@ -1315,6 +1386,11 @@ mark.sfdt-highlight {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.sfdt-impact-overlay .sfdt-json-dialog {
+  border: 1.5px solid rgba(137,180,250,0.25);
+  padding: 4px !important;
 }
 
 .sfdt-json-header {

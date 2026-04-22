@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Advanced Salesforce Developer Toolkit",
-  "version": "1.2.0",
-  "description": "Salesforce toolkit: record inspector, SOQL editor with syntax highlighting, metadata search, debug logs, data builder.",
+  "version": "1.3.0",
+  "description": "SOQL editor, record inspector, Apex debug logs, metadata search, setup navigator — a Developer Console alternative.",
   "permissions": [
     "activeTab",
     "storage",
@@ -95,12 +95,6 @@
         "mac": "Command+Shift+Y"
       },
       "description": "Open Smart Navigator"
-    },
-    "open-debuglog": {
-      "description": "Open Debug Log Viewer"
-    },
-    "open-execanon": {
-      "description": "Open Execute Anonymous"
     }
   }
 }

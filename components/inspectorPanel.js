@@ -10,6 +10,7 @@ const InspectorPanel = (() => {
   let _container = null;
   let _panel = null;
   let _visible = false;
+  let _pinned = false;
   let _currentRecord = null;
   let _currentDescribe = null;
   let _objectName = null;
@@ -39,6 +40,7 @@ const InspectorPanel = (() => {
             <button class="sfdt-btn sfdt-btn-sm" id="insp-download" title="Download">${I.download}</button>
             <button class="sfdt-btn sfdt-btn-sm" id="insp-compare" title="Compare">${I.compare}</button>
             <button class="sfdt-btn sfdt-btn-sm" id="insp-refresh" title="Refresh">${I.refresh}</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-pin-btn" id="insp-pin" title="Pin panel open">${I.pin}</button>
             <button class="sfdt-btn sfdt-btn-sm" id="insp-toggle-size" title="Toggle Size">${I.maximize}</button>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="insp-close" title="Close">${I.x}</button>
           </div>
@@ -67,6 +69,7 @@ const InspectorPanel = (() => {
 
     _container.querySelector('#insp-close').addEventListener('click', hide);
     _container.querySelector('#insp-refresh').addEventListener('click', _refresh);
+    _container.querySelector('#insp-pin').addEventListener('click', _togglePin);
     _container.querySelector('#insp-json').addEventListener('click', _showJSON);
     _container.querySelector('#insp-download').addEventListener('click', _downloadJSON);
     _container.querySelector('#insp-compare').addEventListener('click', _promptCompare);
@@ -164,7 +167,7 @@ const InspectorPanel = (() => {
       _renderFields();
       _updateFooter();
     } catch (err) {
-      console.debug('[SFDT] Inspector load error:', err, 'Object:', _objectName, 'Record:', _recordId);
+      window._sfdtLogger.debug('[SFDT] Inspector load error:', err, 'Object:', _objectName, 'Record:', _recordId);
       body.innerHTML = `<div class="sfdt-error">Error loading ${_esc(_objectName || 'record')}: ${_esc(err.message)}</div>`;
     }
   }
@@ -294,6 +297,13 @@ const InspectorPanel = (() => {
     body.querySelectorAll('.sfdt-inline-edit').forEach(el => {
       el.addEventListener('dblclick', () => _startInlineEdit(el));
     });
+
+    body.querySelectorAll('.sfdt-impact-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _showFieldImpact(btn.dataset.field, btn.dataset.label);
+      });
+    });
   }
 
   function _renderFieldRow(field) {
@@ -330,6 +340,7 @@ const InspectorPanel = (() => {
         <td class="sfdt-td-api">
           <span class="sfdt-copyable" data-copy="${_esc(field.name)}">${_esc(field.name)}</span>
           ${isRelation ? '<span class="sfdt-relation" title="Relationship">&#8594;</span>' : ''}
+          <button class="sfdt-impact-btn" data-field="${_esc(field.name)}" data-label="${_esc(field.label)}" title="Field Impact Analysis">${ICONS().impact}</button>
         </td>
         <td class="sfdt-td-value ${_compareRecord && rowDiffClass ? 'sfdt-diff-highlight-a' : ''}">
           <span class="sfdt-inline-edit sfdt-copyable" data-field="${_esc(field.name)}"
@@ -493,13 +504,243 @@ const InspectorPanel = (() => {
     return div.innerHTML;
   }
 
+  // ─── Field Impact Analysis ────────────────────────────
+
+  async function _showFieldImpact(fieldApiName, fieldLabel) {
+    const I = ICONS();
+    const qualifiedName = `${_objectName}.${fieldApiName}`;
+
+    // Remove any existing impact overlay before creating a new one
+    const existing = _container.querySelector('.sfdt-impact-overlay');
+    if (existing) existing.remove();
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'sfdt-json-overlay sfdt-impact-overlay';
+    overlay.innerHTML = `
+      <div class="sfdt-json-dialog" style="max-width:600px;width:90%">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px !important;background:var(--bg2,#252536);border-bottom:1px solid var(--border,#45475a)">
+          <span style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#89b4fa;flex-shrink:0">${I.impact}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:#cdd6f4">Field Impact Analysis</div>
+            <div style="font-size:11px;color:#a6adc8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              <span style="color:#89b4fa">${_esc(fieldLabel)}</span>
+              <span style="color:#585b70;margin:0 4px">·</span>
+              <span style="font-family:var(--sfdt-mono,monospace);font-size:10px">${_esc(qualifiedName)}</span>
+            </div>
+          </div>
+          <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" style="flex-shrink:0">${I.x}</button>
+        </div>
+        <div class="sfdt-impact-body" style="padding:16px;max-height:60vh;overflow-y:auto">
+          <div class="sfdt-loading">Scanning Apex classes, triggers, flows, validation rules, workflows...</div>
+        </div>
+      </div>
+    `;
+
+    _container.appendChild(overlay);
+    overlay.querySelector('.sfdt-btn-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const body = overlay.querySelector('.sfdt-impact-body');
+
+    try {
+      const results = await _runFieldImpactScan(fieldApiName, qualifiedName);
+      _renderImpactResults(body, results, fieldApiName, qualifiedName);
+    } catch (err) {
+      body.innerHTML = `<div class="sfdt-error">Error scanning: ${_esc(err.message)}</div>`;
+    }
+  }
+
+  async function _runFieldImpactScan(fieldApiName, qualifiedName) {
+    const escapedField = fieldApiName.replace(/'/g, "\\'");
+
+    // Strip namespace prefix for broader matching (e.g., Apttus_Config2__FieldName__c → FieldName__c)
+    const shortName = fieldApiName.replace(/^\w+__/, '');
+    const escapedShort = shortName.replace(/'/g, "\\'");
+    const useShort = shortName !== fieldApiName;
+
+    // Build LIKE clause — search both full name and short name for managed package fields
+    const apexLike = useShort
+      ? `(Body LIKE '%${escapedField}%' OR Body LIKE '%${escapedShort}%')`
+      : `Body LIKE '%${escapedField}%'`;
+    const vrLike = useShort
+      ? `(ErrorConditionFormula LIKE '%${escapedField}%' OR ErrorConditionFormula LIKE '%${escapedShort}%')`
+      : `ErrorConditionFormula LIKE '%${escapedField}%'`;
+
+    const errors = [];
+
+    // Run queries in parallel
+    const [apexClasses, apexTriggers, validationRules, workflows] = await Promise.all([
+      // Apex Classes referencing the field
+      API().toolingQuery(
+        `SELECT Id, Name, Body FROM ApexClass WHERE ${apexLike} LIMIT 50`
+      ).then(r => r.records || []).catch(e => { errors.push('Apex Classes: ' + e.message); return []; }),
+
+      // Apex Triggers referencing the field
+      API().toolingQuery(
+        `SELECT Id, Name, Body, TableEnumOrId FROM ApexTrigger WHERE ${apexLike} LIMIT 50`
+      ).then(r => r.records || []).catch(e => { errors.push('Apex Triggers: ' + e.message); return []; }),
+
+      // Validation Rules on this object that reference this field
+      API().toolingQuery(
+        `SELECT Id, ValidationName, ErrorConditionFormula, Active FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '${_objectName}' AND ${vrLike} LIMIT 50`
+      ).then(r => r.records || []).catch(e => { errors.push('Validation Rules: ' + e.message); return []; }),
+
+      // Workflow Field Updates that reference this field on this object
+      API().toolingQuery(
+        `SELECT Id, Name, FieldDefinition.QualifiedApiName FROM WorkflowFieldUpdate WHERE EntityDefinition.QualifiedApiName = '${_objectName}' AND FieldDefinition.QualifiedApiName LIKE '%${escapedField}%' LIMIT 50`
+      ).then(r => r.records || []).catch(e => { errors.push('Workflow Updates: ' + e.message); return []; })
+    ]);
+
+    return {
+      apexClasses: _filterBodyMatches(apexClasses, fieldApiName, qualifiedName, shortName),
+      apexTriggers: _filterBodyMatches(apexTriggers, fieldApiName, qualifiedName, shortName),
+      validationRules,
+      workflows,
+      errors
+    };
+  }
+
+  function _filterBodyMatches(records, fieldApiName, qualifiedName, shortName) {
+    // Re-check body with case-insensitive match to filter false positives from LIKE
+    const fieldLower = fieldApiName.toLowerCase();
+    const shortLower = (shortName || fieldApiName).toLowerCase();
+    return records.filter(r => {
+      if (!r.Body) return true;
+      const bodyLower = r.Body.toLowerCase();
+      return bodyLower.includes(fieldLower) || bodyLower.includes(shortLower);
+    }).map(r => {
+      // Find matching lines
+      const lines = (r.Body || '').split('\n');
+      const matchingLines = [];
+      const fl = fieldApiName.toLowerCase();
+      const sl = shortLower;
+      lines.forEach((line, i) => {
+        const ll = line.toLowerCase();
+        if (ll.includes(fl) || ll.includes(sl)) {
+          matchingLines.push({ lineNum: i + 1, text: line.trim() });
+        }
+      });
+      return { ...r, matchingLines: matchingLines.slice(0, 5) };
+    });
+  }
+
+  function _renderImpactResults(container, results, fieldApiName, qualifiedName) {
+    const I = ICONS();
+    const base = API().getInstanceUrl();
+    const isLightning = base.includes('lightning.force.com')
+      || document.querySelector('one-app-nav-bar')
+      || window.location.pathname.startsWith('/lightning');
+
+    const totalRefs =
+      results.apexClasses.length +
+      results.apexTriggers.length +
+      results.validationRules.length +
+      results.workflows.length;
+
+    // Show errors if any queries failed
+    let errorBanner = '';
+    if (results.errors && results.errors.length > 0) {
+      errorBanner = `
+        <div style="margin-bottom:10px;padding:6px 10px;background:rgba(243,139,168,0.1);border:1px solid rgba(243,139,168,0.2);border-radius:6px;font-size:11px;color:#f38ba8">
+          Some queries failed: ${results.errors.map(e => _esc(e)).join('; ')}
+        </div>
+      `;
+    }
+
+    let html = errorBanner + `
+      <div style="margin-bottom:12px;padding:8px 12px;background:rgba(137,180,250,0.08);border:1px solid rgba(137,180,250,0.15);border-radius:6px;font-size:12px;color:#cdd6f4;display:flex;align-items:center;gap:8px">
+        <span style="width:14px;height:14px;display:inline-flex;color:#89b4fa;flex-shrink:0">${I.impact}</span>
+        <span><strong style="color:#89b4fa">${totalRefs}</strong> reference${totalRefs !== 1 ? 's' : ''} found across metadata</span>
+      </div>
+    `;
+
+    // Apex Classes
+    if (results.apexClasses.length > 0) {
+      html += _renderImpactSection('Apex Classes', I.code, results.apexClasses.map(c => {
+        const url = isLightning ? `${base}/lightning/setup/ApexClasses/page?address=/${c.Id}` : `${base}/${c.Id}`;
+        return {
+          name: c.Name,
+          url,
+          lines: c.matchingLines || []
+        };
+      }));
+    }
+
+    // Apex Triggers
+    if (results.apexTriggers.length > 0) {
+      html += _renderImpactSection('Apex Triggers', I.bolt, results.apexTriggers.map(t => {
+        const url = isLightning ? `${base}/lightning/setup/ApexTriggers/page?address=/${t.Id}` : `${base}/${t.Id}`;
+        return {
+          name: t.Name,
+          url,
+          lines: t.matchingLines || []
+        };
+      }));
+    }
+
+    // Validation Rules
+    if (results.validationRules.length > 0) {
+      html += _renderImpactSection('Validation Rules', I.check, results.validationRules.map(v => ({
+        name: v.ValidationName,
+        status: v.Active ? 'Active' : 'Inactive',
+        lines: [{ text: (v.ErrorConditionFormula || '').substring(0, 120) }]
+      })));
+    }
+
+    // Workflows
+    if (results.workflows.length > 0) {
+      html += _renderImpactSection('Workflow Field Updates', I.git, results.workflows.map(w => ({
+        name: w.Name
+      })));
+    }
+
+    if (totalRefs === 0) {
+      html = `
+        <div style="text-align:center;padding:28px 16px;color:#7f849c">
+          <div style="width:36px;height:36px;margin:0 auto 10px !important;color:#a6e3a1;opacity:0.7">${I.check}</div>
+          <div style="font-size:13px;color:#a6e3a1;font-weight:600;margin-bottom:4px">No References Found</div>
+          <div style="font-size:11px;line-height:1.5">This field is not referenced in any<br>Apex classes, triggers, or validation rules.</div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+  }
+
+  function _renderImpactSection(title, icon, items) {
+    return `
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+          <span style="width:16px;height:16px;display:inline-flex">${icon}</span>
+          ${title} (${items.length})
+        </div>
+        ${items.map(item => `
+          <div style="padding:6px 12px;background:#252536;border-radius:4px;margin-bottom:4px;font-size:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="color:#cdd6f4;font-weight:500">
+                ${item.url ? `<a href="${item.url}" target="_blank" style="color:#89b4fa;text-decoration:none">${_esc(item.name)}</a>` : _esc(item.name)}
+              </span>
+              ${item.status ? `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${item.status === 'Active' ? '#a6e3a120' : '#45475a'};color:${item.status === 'Active' ? '#a6e3a1' : '#7f849c'}">${item.status}</span>` : ''}
+            </div>
+            ${(item.lines || []).map(l => `
+              <div style="font-family:var(--sfdt-mono);font-size:10px;color:#a6adc8;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${l.lineNum ? `<span style="color:#585b70;margin-right:6px">L${l.lineNum}</span>` : ''}${_esc(l.text)}
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
   function show() {
     _create();
     _panel.classList.add('visible');
     _visible = true;
     // Always re-detect from URL (Lightning SPA may have changed the URL)
     const detected = _detectRecordFromUrl();
-    console.log('[SFDT] Inspector show — detected:', detected, 'URL:', window.location.href);
+    window._sfdtLogger.log('[SFDT] Inspector show — detected:', detected, 'URL:', window.location.href);
     if (detected) {
       _loadRecord(detected.objectName, detected.recordId);
     } else {
@@ -531,8 +772,18 @@ const InspectorPanel = (() => {
 
   function toggle() { _visible ? hide() : show(); }
   function isVisible() { return _visible; }
+  function isPinned() { return _pinned; }
 
-  return { show, hide, toggle, isVisible };
+  function _togglePin() {
+    _pinned = !_pinned;
+    const btn = _container.querySelector('#insp-pin');
+    if (btn) {
+      btn.classList.toggle('sfdt-btn-active', _pinned);
+      btn.title = _pinned ? 'Unpin panel' : 'Pin panel open';
+    }
+  }
+
+  return { show, hide, toggle, isVisible, isPinned };
 })();
 
 if (typeof window !== 'undefined') window.SFDTInspectorPanel = InspectorPanel;

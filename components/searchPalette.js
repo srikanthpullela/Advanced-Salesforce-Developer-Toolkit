@@ -35,10 +35,102 @@ const SearchPalette = (() => {
   let _autoSearchEnabled = false;
   let _autoSearchTimer = null;
 
-  const HISTORY_KEY = 'sfdt_search_history';
+  // Org-scoped keys — each Salesforce org gets its own data
+  function _orgKey(base) {
+    const orgId = window.SalesforceAPI?.getOrgId?.() || '';
+    return orgId ? `${base}_${orgId}` : base;
+  }
+  function HISTORY_KEY() { return _orgKey('sfdt_search_history'); }
   const AUTO_SEARCH_KEY = 'sfdt_auto_search';
+  const ONBOARD_KEY = 'sfdt_search_onboarded_v2';
+  function RECENT_RECORDS_KEY() { return _orgKey('sfdt_recent_records'); }
+  function PINNED_KEY() { return _orgKey('sfdt_pinned_items'); }
   const AUTO_SEARCH_DEBOUNCE = 500;
   const MAX_HISTORY = 30;
+  const MAX_RECENT_RECORDS = 20;
+  const MAX_PINNED = 30;
+
+  let _recentRecords = [];
+  let _pinnedItems = [];
+
+  // ─── Cross-origin persistence via chrome.storage.local ───
+  // localStorage is origin-scoped (Lightning vs Classic are different origins)
+  // chrome.storage.local persists across all origins for the extension
+  function _storageGet(key) {
+    return new Promise(resolve => {
+      try {
+        chrome.storage.local.get(key, result => resolve(result[key]));
+      } catch { resolve(undefined); }
+    });
+  }
+  function _storageSet(key, value) {
+    try { chrome.storage.local.set({ [key]: value }); } catch { /* ignore */ }
+  }
+
+  // ─── Recent Records ──────────────────────────────────
+  function _trackRecentRecord(result) {
+    if (!result || !result.id) return;
+    const entry = {
+      id: result.id,
+      name: result.name || result.label || result.id,
+      type: result.type,
+      sobjectType: result.sobjectType || result.type,
+      matchType: result.matchType,
+      timestamp: Date.now()
+    };
+    _recentRecords = _recentRecords.filter(r => r.id !== entry.id);
+    _recentRecords.unshift(entry);
+    if (_recentRecords.length > MAX_RECENT_RECORDS) _recentRecords.length = MAX_RECENT_RECORDS;
+    _storageSet(RECENT_RECORDS_KEY(), _recentRecords);
+  }
+
+  async function _loadRecentRecords() {
+    const data = await _storageGet(RECENT_RECORDS_KEY());
+    _recentRecords = Array.isArray(data) ? data : [];
+  }
+
+  // ─── Pinned Favorites ────────────────────────────────
+  function _togglePin(result) {
+    if (!result) return;
+    const id = result.id || result.name;
+    const existing = _pinnedItems.findIndex(p => (p.id || p.name) === id);
+    if (existing >= 0) {
+      _pinnedItems.splice(existing, 1);
+    } else {
+      // Store all properties needed for navigation
+      const pin = {
+        id: result.id,
+        name: result.name || result.label,
+        type: result.type,
+        sobjectType: result.sobjectType,
+        matchType: result.matchType,
+        path: result.path,
+        classicPath: result.classicPath,
+        setupId: result.setupId,
+        entityName: result.entityName,
+        entityId: result.entityId,
+        fieldApiName: result.fieldApiName,
+        keyPrefix: result.keyPrefix,
+        sobjectName: result.sobjectName,
+        url: result.url,
+        timestamp: Date.now()
+      };
+      _pinnedItems.unshift(pin);
+      if (_pinnedItems.length > MAX_PINNED) _pinnedItems.length = MAX_PINNED;
+    }
+    _storageSet(PINNED_KEY(), _pinnedItems);
+  }
+
+  function _isPinned(result) {
+    if (!result) return false;
+    const id = result.id || result.name;
+    return _pinnedItems.some(p => (p.id || p.name) === id);
+  }
+
+  async function _loadPinnedItems() {
+    const data = await _storageGet(PINNED_KEY());
+    _pinnedItems = Array.isArray(data) ? data : [];
+  }
 
   const TYPE_FILTERS = [
     { key: 'all', label: 'All' },
@@ -139,15 +231,19 @@ const SearchPalette = (() => {
 
     _container.querySelector('#sfdt-rebuild-index').addEventListener('click', _rebuildIndex);
 
-    // Auto Search toggle
+    // Auto Search toggle — persisted via chrome.storage.local (cross-origin)
     const autoToggle = _container.querySelector('#sfdt-auto-search-toggle');
-    try { _autoSearchEnabled = localStorage.getItem(AUTO_SEARCH_KEY) === '1'; } catch { /* ignore */ }
+    _storageGet(AUTO_SEARCH_KEY).then(val => {
+      _autoSearchEnabled = val === true;
+      if (autoToggle) {
+        autoToggle.checked = _autoSearchEnabled;
+        _updateAutoSearchUI();
+      }
+    });
     if (autoToggle) {
-      autoToggle.checked = _autoSearchEnabled;
-      _updateAutoSearchUI();
       autoToggle.addEventListener('change', () => {
         _autoSearchEnabled = autoToggle.checked;
-        try { localStorage.setItem(AUTO_SEARCH_KEY, _autoSearchEnabled ? '1' : '0'); } catch { /* ignore */ }
+        _storageSet(AUTO_SEARCH_KEY, _autoSearchEnabled);
         _updateAutoSearchUI();
         if (_autoSearchEnabled && _input.value.trim().length >= 2) {
           _performSearch(_input.value);
@@ -256,8 +352,9 @@ const SearchPalette = (() => {
       clearTimeout(_autoSearchTimer);
       _currentResults = [];
       _showSearchHistory();
-      _statusBar.textContent = _searchHistory.length > 0
-        ? `${_searchHistory.length} recent searches`
+      const _recentCount = _recentRecords.length + _searchHistory.length;
+      _statusBar.textContent = _recentCount > 0
+        ? `${_recentCount} recent items`
         : _autoSearchEnabled ? 'Type to auto search' : 'Type and press Enter to search';
       _setSearchBtnEnabled(false);
       return;
@@ -309,8 +406,9 @@ const SearchPalette = (() => {
       _pendingSearches.clear();
       _updateSearchingBanner();
       _showSearchHistory();
-      _statusBar.textContent = _searchHistory.length > 0
-        ? `${_searchHistory.length} recent searches`
+      const _recentCount2 = _recentRecords.length + _searchHistory.length;
+      _statusBar.textContent = _recentCount2 > 0
+        ? `${_recentCount2} recent items`
         : 'Type and press Enter to search';
       return;
     }
@@ -465,7 +563,7 @@ const SearchPalette = (() => {
         _performDeepCodeSearch(query);
       }
     } catch (e) {
-      console.debug('[SFDT] Code search error:', e.message);
+      window._sfdtLogger.debug('[SFDT] Code search error:', e.message);
       _pendingSearches.delete('code');
       _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
@@ -558,7 +656,7 @@ const SearchPalette = (() => {
       // Re-enable search button after regular search completes
       if (!_deepSearchEnabled) _setSearchBtnEnabled(true);
     } catch (e) {
-      console.debug('[SFDT] Record search error:', e.message);
+      window._sfdtLogger.debug('[SFDT] Record search error:', e.message);
       _pendingSearches.delete('record');
       _updateSearchingBanner();
       _setSearchBtnEnabled(true);
@@ -640,11 +738,11 @@ const SearchPalette = (() => {
       <span class="sfdt-deep-search-arrow">→</span>
     `;
     bar.addEventListener('click', () => {
-      console.log('[SFDT] Deep search bar clicked, query:', query);
+      window._sfdtLogger.log('[SFDT] Deep search bar clicked, query:', query);
       _triggerDeepSearch(query);
     });
     slot.appendChild(bar);
-    console.log('[SFDT] Deep search bar appended to slot');
+    window._sfdtLogger.log('[SFDT] Deep search bar appended to slot');
   }
 
   function _removeDeepSearchBar() {
@@ -655,7 +753,7 @@ const SearchPalette = (() => {
 
   function _triggerDeepSearch(query) {
     if (!query || query.length < 2) return;
-    console.log('[SFDT] Deep search triggered for:', query);
+    window._sfdtLogger.log('[SFDT] Deep search triggered for:', query);
     _deepSearchEnabled = true;
     _setSearchBtnEnabled(false);
     _removeDeepSearchBar();
@@ -678,7 +776,7 @@ const SearchPalette = (() => {
 
     // Fire code SOSL search (Tooling API)
     if (query.length >= 4) {
-      console.log('[SFDT] Deep: firing code search for:', query);
+      window._sfdtLogger.log('[SFDT] Deep: firing code search for:', query);
       clearTimeout(_codeSearchTimer);
       _codeSearchAbortId++;
       const currentAbortId = _codeSearchAbortId;
@@ -687,7 +785,7 @@ const SearchPalette = (() => {
 
     // Fire field search (EntityParticle)
     if (query.length >= 3) {
-      console.log('[SFDT] Deep: firing field search for:', query);
+      window._sfdtLogger.log('[SFDT] Deep: firing field search for:', query);
       clearTimeout(_fieldSearchTimer);
       _fieldSearchAbortId++;
       const currentFieldAbortId = _fieldSearchAbortId;
@@ -696,7 +794,7 @@ const SearchPalette = (() => {
 
     // Fire dynamic record search across all custom objects
     if (query.length >= 3 && SEARCH().searchRecordsDynamic) {
-      console.log('[SFDT] Deep: firing dynamic search for:', query);
+      window._sfdtLogger.log('[SFDT] Deep: firing dynamic search for:', query);
       _dynamicSearchAbortId++;
       _performDynamicSearch(query);
     }
@@ -769,7 +867,7 @@ const SearchPalette = (() => {
       const total = _currentResults.length;
       _statusBar.textContent = `${total} result${total !== 1 ? 's' : ''}${fieldNote}${filterNote}`;
     } catch (e) {
-      console.debug('[SFDT] Field search error:', e.message);
+      window._sfdtLogger.debug('[SFDT] Field search error:', e.message);
       _pendingSearches.delete('field');
       _updateSearchingBanner();
       if (_currentResults.length === 0 && _pendingSearches.size === 0) _renderResults([]);
@@ -861,18 +959,30 @@ const SearchPalette = (() => {
           ${matchInfo}${symbolInfo}${recordInfo}${fieldInfo}${apiNameSub}
         </div>
         ${typeBadge}
+        <button class="sfdt-result-pin ${_isPinned(r) ? 'pinned' : ''}" data-index="${i}" title="${_isPinned(r) ? 'Unpin' : 'Pin to favorites'}">${ICONS().pin}</button>
         <button class="sfdt-result-newtab" data-index="${i}" title="Open in new tab (Shift+Enter)">${ICONS().externalLink}</button>
       </div>`;
     }).join('');
 
     _resultsList.querySelectorAll('.sfdt-result').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('.sfdt-result-newtab')) return;
+        if (e.target.closest('.sfdt-result-newtab') || e.target.closest('.sfdt-result-pin')) return;
         _selectResult(parseInt(el.dataset.index, 10));
       });
       el.addEventListener('mouseenter', () => {
         _selectedIndex = parseInt(el.dataset.index, 10);
         _updateSelection();
+      });
+    });
+
+    _resultsList.querySelectorAll('.sfdt-result-pin').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.index, 10);
+        const r = _currentResults[idx];
+        _togglePin(r);
+        btn.classList.toggle('pinned');
+        btn.title = _isPinned(r) ? 'Unpin' : 'Pin to favorites';
       });
     });
 
@@ -984,6 +1094,9 @@ const SearchPalette = (() => {
       _addToHistory(_input.value.trim(), result);
     }
 
+    // Track as recent record (for any item with an ID)
+    _trackRecentRecord(result);
+
     // For records, navigate to the record page directly
     if (result.matchType === 'record' && result.id) {
       const base = window.SalesforceAPI.getInstanceUrl();
@@ -1034,42 +1147,114 @@ const SearchPalette = (() => {
       timestamp: Date.now()
     });
     if (_searchHistory.length > MAX_HISTORY) _searchHistory.length = MAX_HISTORY;
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(_searchHistory)); } catch { /* ignore */ }
+    try { localStorage.setItem(HISTORY_KEY(), JSON.stringify(_searchHistory)); } catch { /* ignore */ }
   }
 
   function _loadHistory() {
-    try { _searchHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { _searchHistory = []; }
+    try { _searchHistory = JSON.parse(localStorage.getItem(HISTORY_KEY()) || '[]'); } catch { _searchHistory = []; }
   }
 
   function _showSearchHistory() {
-    if (_searchHistory.length === 0) {
+    const I = ICONS();
+    let html = '';
+
+    // ── Pinned Favorites ──
+    if (_pinnedItems.length > 0) {
+      html += `
+        <div style="padding:6px 16px;font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
+          <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-flex;width:12px;height:12px">${I.pin}</span> Pinned Favorites</span>
+        </div>
+        ${_pinnedItems.map((p, i) => `
+          <div class="sfdt-result sfdt-pinned-item" data-pin-index="${i}">
+            <span class="sfdt-result-icon">${_getPinnedIcon(p)}</span>
+            <div class="sfdt-result-content">
+              <div class="sfdt-result-name">${_escapeHTML(p.name || p.id)}</div>
+              <div class="sfdt-result-sub">${_escapeHTML(p.type || p.matchType || '')}</div>
+            </div>
+            <button class="sfdt-unpin-btn" data-pin-index="${i}" title="Unpin">${I.x}</button>
+          </div>
+        `).join('')}`;
+    }
+
+    // ── Recent (records + searches merged) ──
+    const recentItems = [];
+    _recentRecords.slice(0, 8).forEach(r => recentItems.push({ kind: 'record', data: r }));
+    _searchHistory.slice(0, 10).forEach(h => recentItems.push({ kind: 'search', data: h }));
+
+    if (recentItems.length > 0) {
+      html += `
+        <div style="padding:6px 16px;font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
+          <span>Recent</span>
+          <button class="sfdt-btn sfdt-btn-sm" id="sfdt-clear-all-recent" style="font-size:10px">${I.x} Clear</button>
+        </div>`;
+      recentItems.forEach((item, idx) => {
+        if (item.kind === 'record') {
+          const r = item.data;
+          html += `
+          <div class="sfdt-result sfdt-recent-record" data-recent-index="${_recentRecords.indexOf(r)}">
+            <span class="sfdt-result-icon">${r.matchType === 'record' ? _getRecordIcon(r.sobjectType) : _getTypeIcon(r.type)}</span>
+            <div class="sfdt-result-content">
+              <div class="sfdt-result-name">${_escapeHTML(r.name || r.id)}</div>
+              <div class="sfdt-result-sub">${_escapeHTML(r.sobjectType || r.type || '')} · ${_timeAgo(r.timestamp)}</div>
+            </div>
+            <span class="sfdt-result-arrow">${I.arrowRight}</span>
+          </div>`;
+        } else {
+          const h = item.data;
+          const hIdx = _searchHistory.indexOf(h);
+          html += `
+          <div class="sfdt-result sfdt-history-item" data-query="${_escapeHTML(h.query)}" data-index="${hIdx}">
+            <span class="sfdt-result-icon">${I.clock}</span>
+            <div class="sfdt-result-content">
+              <div class="sfdt-result-name">${_escapeHTML(h.query)}</div>
+              <div class="sfdt-result-sub">${_escapeHTML(h.resultName || '')} · ${_escapeHTML(h.resultType || '')}</div>
+            </div>
+            <span class="sfdt-result-arrow">${I.arrowRight}</span>
+          </div>`;
+        }
+      });
+    }
+
+    if (!html) {
       _resultsList.innerHTML = '';
       return;
     }
-    const I = ICONS();
-    _resultsList.innerHTML = `
-      <div style="padding:6px 16px;font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
-        <span>Recent Searches</span>
-        <button class="sfdt-btn sfdt-btn-sm" id="sfdt-clear-history" style="font-size:10px">${I.x} Clear</button>
-      </div>
-      ${_searchHistory.slice(0, 10).map((h, i) => `
-        <div class="sfdt-result sfdt-history-item" data-query="${_escapeHTML(h.query)}" data-index="${i}">
-          <span class="sfdt-result-icon">${I.clock}</span>
-          <div class="sfdt-result-content">
-            <div class="sfdt-result-name">${_escapeHTML(h.query)}</div>
-            <div class="sfdt-result-sub">${_escapeHTML(h.resultName || '')} · ${_escapeHTML(h.resultType || '')}</div>
-          </div>
-          <span class="sfdt-result-arrow">${I.arrowRight}</span>
-        </div>
-      `).join('')}
-    `;
 
-    _resultsList.querySelector('#sfdt-clear-history')?.addEventListener('click', (e) => {
+    _resultsList.innerHTML = html;
+
+    // ── Wire up handlers ──
+    _resultsList.querySelectorAll('.sfdt-pinned-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.sfdt-unpin-btn')) return;
+        const p = _pinnedItems[parseInt(el.dataset.pinIndex, 10)];
+        if (p) _navigateToPinnedOrRecent(p);
+      });
+    });
+
+    _resultsList.querySelectorAll('.sfdt-unpin-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.pinIndex, 10);
+        _pinnedItems.splice(idx, 1);
+        _storageSet(PINNED_KEY(), _pinnedItems);
+        _showSearchHistory();
+      });
+    });
+
+    _resultsList.querySelector('#sfdt-clear-all-recent')?.addEventListener('click', (e) => {
       e.stopPropagation();
+      _recentRecords = [];
       _searchHistory = [];
-      try { localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ }
-      _resultsList.innerHTML = '';
-      _statusBar.textContent = 'Type to search records, metadata, and code';
+      _storageSet(RECENT_RECORDS_KEY(), []);
+      try { localStorage.removeItem(HISTORY_KEY()); } catch { /* ignore */ }
+      _showSearchHistory();
+    });
+
+    _resultsList.querySelectorAll('.sfdt-recent-record').forEach(el => {
+      el.addEventListener('click', () => {
+        const r = _recentRecords[parseInt(el.dataset.recentIndex, 10)];
+        if (r) _navigateToPinnedOrRecent(r);
+      });
     });
 
     _resultsList.querySelectorAll('.sfdt-history-item').forEach(el => {
@@ -1078,6 +1263,45 @@ const SearchPalette = (() => {
         _performSearch(el.dataset.query);
       });
     });
+  }
+
+  function _navigateToPinnedOrRecent(item) {
+    const base = window.SalesforceAPI.getInstanceUrl();
+    const isLightning = base.includes('lightning.force.com')
+      || document.querySelector('one-app-nav-bar')
+      || window.location.pathname.startsWith('/lightning');
+
+    let url;
+    if (item.matchType === 'record' && item.id) {
+      url = isLightning
+        ? `${base}/lightning/r/${item.sobjectType}/${item.id}/view`
+        : `${base}/${item.id}`;
+    } else if (item.matchType === 'field' && item.entityName) {
+      url = isLightning
+        ? `${base}/lightning/setup/ObjectManager/${encodeURIComponent(item.entityName)}/FieldsAndRelationships/${encodeURIComponent(item.fieldApiName)}/view`
+        : `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(item.entityName)}&setupid=CustomObjects`;
+    } else {
+      // Use the same routing as normal search results
+      url = META().getSetupUrl(item);
+    }
+    if (url) {
+      _openUrl(url, false);
+      hide();
+    }
+  }
+
+  function _getPinnedIcon(item) {
+    if (item.matchType === 'record') return _getRecordIcon(item.sobjectType);
+    if (item.matchType === 'field') return ICONS().tag;
+    return _getTypeIcon(item.type);
+  }
+
+  function _timeAgo(ts) {
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+    return Math.floor(diff / 86400000) + 'd ago';
   }
 
   function show() {
@@ -1096,13 +1320,21 @@ const SearchPalette = (() => {
     _statusBar.textContent = 'Type and press Enter to search';
     _setSearchBtnEnabled(false);
     requestAnimationFrame(() => _input.focus());
-    _showOnboardingIfNeeded();
+    // Load all persisted data then show
+    Promise.all([_loadRecentRecords(), _loadPinnedItems()]).then(() => {
+      _showSearchHistory();
+      _showOnboardingIfNeeded();
+    });
   }
 
   function _showOnboardingIfNeeded() {
-    const ONBOARD_KEY = 'sfdt_search_onboarded_v2';
-    try { if (localStorage.getItem(ONBOARD_KEY)) return; } catch { return; }
+    _storageGet(ONBOARD_KEY).then(val => {
+      if (val) return;
+      _renderOnboarding();
+    });
+  }
 
+  function _renderOnboarding() {
     const overlay = document.createElement('div');
     overlay.className = 'sfdt-onboarding-overlay';
     overlay.innerHTML = `
@@ -1136,7 +1368,7 @@ const SearchPalette = (() => {
 
     const dismiss = () => {
       overlay.remove();
-      try { localStorage.setItem(ONBOARD_KEY, '1'); } catch { /* ignore */ }
+      _storageSet(ONBOARD_KEY, true);
       _input.focus();
     };
     overlay.querySelector('.sfdt-onboarding-dismiss').addEventListener('click', dismiss);

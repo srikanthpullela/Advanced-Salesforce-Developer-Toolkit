@@ -7,6 +7,21 @@
 (function () {
   'use strict';
 
+  // ─── Silent Logger ─────────────────────────────────────
+  // All [SFDT] logs are silent by default. To enable in browser console:
+  //   window.SFDT_DEBUG = true
+  // Or to enable persistently:
+  //   chrome.storage.local.set({ sfdt_debug: true })
+  if (!window._sfdtLogger) {
+    const noop = () => {};
+    const _log = (...args) => { if (window.SFDT_DEBUG) console.log(...args); };
+    const _debug = (...args) => { if (window.SFDT_DEBUG) console.debug(...args); };
+    const _warn = (...args) => { if (window.SFDT_DEBUG) console.warn(...args); };
+    window._sfdtLogger = { log: _log, debug: _debug, warn: _warn };
+    // Load persisted debug flag
+    try { chrome.storage.local.get('sfdt_debug', r => { if (r.sfdt_debug) window.SFDT_DEBUG = true; }); } catch { /* ignore */ }
+  }
+
   // Prevent double initialization
   if (window._sfdtInitialized) return;
   window._sfdtInitialized = true;
@@ -27,7 +42,7 @@
   document.addEventListener('keydown', _handleKeyboard, true);
   document.addEventListener('contextmenu', _updateContextMenu, true);
   document.addEventListener('mousedown', _handleOutsideClick, true);
-  console.log('[SFDT] Listeners registered.');
+  window._sfdtLogger.log('[SFDT] Listeners registered.');
 
   // ─── Page Detection ───────────────────────────────────
 
@@ -66,36 +81,36 @@
     // Only run on actual Salesforce org pages (Lightning, Classic, Setup, VF)
     // Skip login pages, help, Trailhead, static assets, etc.
     if (!_isOrgPage()) {
-      console.log('[SFDT] Skipping non-org page:', window.location.hostname);
+      window._sfdtLogger.log('[SFDT] Skipping non-org page:', window.location.hostname);
       return;
     }
 
-    console.log('[SFDT] Connecting to Salesforce...');
+    window._sfdtLogger.log('[SFDT] Connecting to Salesforce...');
 
     const connected = await API.connect();
 
     if (!connected) {
       _initRetries++;
       if (_initRetries <= MAX_INIT_RETRIES) {
-        console.debug(`[SFDT] Could not obtain session. Retry ${_initRetries}/${MAX_INIT_RETRIES} in 5s...`);
+        window._sfdtLogger.debug(`[SFDT] Could not obtain session. Retry ${_initRetries}/${MAX_INIT_RETRIES} in 5s...`);
         setTimeout(init, 5000);
       } else {
-        console.debug('[SFDT] Could not obtain session after retries. Extension inactive on this page.');
+        window._sfdtLogger.debug('[SFDT] Could not obtain session after retries. Extension inactive on this page.');
       }
       return;
     }
 
-    console.log('[SFDT] Connected to Salesforce.');
-    console.log('[SFDT] Instance:', API.getInstanceUrl());
+    window._sfdtLogger.log('[SFDT] Connected to Salesforce.');
+    window._sfdtLogger.log('[SFDT] Instance:', API.getInstanceUrl());
 
     // Start background indexing
-    console.log('[SFDT] Starting metadata index build...');
+    window._sfdtLogger.log('[SFDT] Starting metadata index build...');
     META.buildIndex().then(() => {
       const idx = META.getIndex();
       const count = Object.values(idx).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
-      console.log('[SFDT] Metadata index built. Total items:', count, 'Categories:', Object.keys(idx).join(', '));
+      window._sfdtLogger.log('[SFDT] Metadata index built. Total items:', count, 'Categories:', Object.keys(idx).join(', '));
     }).catch(err => {
-      console.debug('[SFDT] Index build error:', err);
+      window._sfdtLogger.debug('[SFDT] Index build error:', err);
     });
 
     // Add floating toolbar
@@ -189,17 +204,17 @@
     if (target && target.id && target.id.startsWith('sfdt-host-')) return;
     if (target && target.closest && target.closest('[id^="sfdt-host-"]')) return;
 
-    // Close any visible side panels (not modals — they have their own backdrops)
-    if (INSPECTOR.isVisible()) INSPECTOR.hide();
-    if (SOQL.isVisible()) SOQL.hide();
-    if (DEBUGLOG.isVisible()) DEBUGLOG.hide();
-    if (EXECANON.isVisible()) EXECANON.hide();
+    // Close any visible side panels ONLY if they are not pinned
+    if (INSPECTOR.isVisible() && !INSPECTOR.isPinned()) INSPECTOR.hide();
+    if (SOQL.isVisible() && !SOQL.isPinned()) SOQL.hide();
+    if (DEBUGLOG.isVisible() && !DEBUGLOG.isPinned()) DEBUGLOG.hide();
+    if (EXECANON.isVisible() && !EXECANON.isPinned()) EXECANON.hide();
   }
 
   // ─── Message Handler (from background/popup) ─────────
 
   function _handleMessage(message) {
-    console.log('[SFDT] Received message:', message.action);
+    window._sfdtLogger.log('[SFDT] Received message:', message.action);
     switch (message.action) {
       case 'open-search-palette': PALETTE.show(); break;
       case 'open-inspector': INSPECTOR.show(); break;
@@ -247,11 +262,11 @@
             ${ICONS.compass}
             <span class="sfdt-toolbar-label">Navigate</span>
           </button>
-          <button class="sfdt-toolbar-btn" data-action="debuglog" title="Debug Logs (Ctrl+Shift+K)">
+          <button class="sfdt-toolbar-btn" data-action="debuglog" title="Debug Logs">
             ${ICONS.terminal}
             <span class="sfdt-toolbar-label">Logs</span>
           </button>
-          <button class="sfdt-toolbar-btn" data-action="execanon" title="Execute Anonymous (Ctrl+Shift+E)">
+          <button class="sfdt-toolbar-btn" data-action="execanon" title="Execute Anonymous">
             ${ICONS.code}
             <span class="sfdt-toolbar-label">Execute</span>
           </button>
