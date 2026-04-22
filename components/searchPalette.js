@@ -44,14 +44,16 @@ const SearchPalette = (() => {
   const AUTO_SEARCH_KEY = 'sfdt_auto_search';
   const ONBOARD_KEY = 'sfdt_search_onboarded_v2';
   function RECENT_RECORDS_KEY() { return _orgKey('sfdt_recent_records'); }
-  function PINNED_KEY() { return _orgKey('sfdt_pinned_items'); }
+  const PINNED_KEY = 'sfdt_pinned_items'; // Global — pins work across all orgs
   const AUTO_SEARCH_DEBOUNCE = 500;
   const MAX_HISTORY = 30;
   const MAX_RECENT_RECORDS = 20;
-  const MAX_PINNED = 30;
+  const MAX_PINNED = 50;
+  const PINNED_COLLAPSED_COUNT = 5;
 
   let _recentRecords = [];
   let _pinnedItems = [];
+  let _pinsExpanded = false;
 
   // ─── Cross-origin persistence via chrome.storage.local ───
   // localStorage is origin-scoped (Lightning vs Classic are different origins)
@@ -118,7 +120,7 @@ const SearchPalette = (() => {
       _pinnedItems.unshift(pin);
       if (_pinnedItems.length > MAX_PINNED) _pinnedItems.length = MAX_PINNED;
     }
-    _storageSet(PINNED_KEY(), _pinnedItems);
+    _storageSet(PINNED_KEY, _pinnedItems);
   }
 
   function _isPinned(result) {
@@ -128,7 +130,7 @@ const SearchPalette = (() => {
   }
 
   async function _loadPinnedItems() {
-    const data = await _storageGet(PINNED_KEY());
+    const data = await _storageGet(PINNED_KEY);
     _pinnedItems = Array.isArray(data) ? data : [];
   }
 
@@ -1160,11 +1162,14 @@ const SearchPalette = (() => {
 
     // ── Pinned Favorites ──
     if (_pinnedItems.length > 0) {
+      const showAll = _pinsExpanded || _pinnedItems.length <= PINNED_COLLAPSED_COUNT;
+      const visiblePins = showAll ? _pinnedItems : _pinnedItems.slice(0, PINNED_COLLAPSED_COUNT);
+      const hiddenCount = _pinnedItems.length - PINNED_COLLAPSED_COUNT;
       html += `
         <div style="padding:6px 16px;font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
-          <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-flex;width:12px;height:12px">${I.pin}</span> Pinned Favorites</span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-flex;width:12px;height:12px">${I.pin}</span> Pinned Favorites (${_pinnedItems.length})</span>
         </div>
-        ${_pinnedItems.map((p, i) => `
+        ${visiblePins.map((p, i) => `
           <div class="sfdt-result sfdt-pinned-item" data-pin-index="${i}">
             <span class="sfdt-result-icon">${_getPinnedIcon(p)}</span>
             <div class="sfdt-result-content">
@@ -1174,6 +1179,11 @@ const SearchPalette = (() => {
             <button class="sfdt-unpin-btn" data-pin-index="${i}" title="Unpin">${I.x}</button>
           </div>
         `).join('')}`;
+      if (!showAll && hiddenCount > 0) {
+        html += `<div class="sfdt-result" id="sfdt-show-more-pins" style="justify-content:center;cursor:pointer;color:#89b4fa;font-size:11px;padding:6px 16px">Show ${hiddenCount} more pinned items</div>`;
+      } else if (_pinsExpanded && _pinnedItems.length > PINNED_COLLAPSED_COUNT) {
+        html += `<div class="sfdt-result" id="sfdt-show-less-pins" style="justify-content:center;cursor:pointer;color:#89b4fa;font-size:11px;padding:6px 16px">Show less</div>`;
+      }
     }
 
     // ── Recent (records + searches merged) ──
@@ -1236,9 +1246,18 @@ const SearchPalette = (() => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.pinIndex, 10);
         _pinnedItems.splice(idx, 1);
-        _storageSet(PINNED_KEY(), _pinnedItems);
+        _storageSet(PINNED_KEY, _pinnedItems);
         _showSearchHistory();
       });
+    });
+
+    _resultsList.querySelector('#sfdt-show-more-pins')?.addEventListener('click', () => {
+      _pinsExpanded = true;
+      _showSearchHistory();
+    });
+    _resultsList.querySelector('#sfdt-show-less-pins')?.addEventListener('click', () => {
+      _pinsExpanded = false;
+      _showSearchHistory();
     });
 
     _resultsList.querySelector('#sfdt-clear-all-recent')?.addEventListener('click', (e) => {
@@ -1311,6 +1330,7 @@ const SearchPalette = (() => {
     _input.value = '';
     _currentResults = [];
     _selectedIndex = 0;
+    _pinsExpanded = false;
     _pendingSearches.clear();
     _renderResults([]);
     _removeDeepSearchBar();
