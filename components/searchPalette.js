@@ -34,6 +34,7 @@ const SearchPalette = (() => {
   let _lastSearchQuery = null;
   let _autoSearchEnabled = false;
   let _autoSearchTimer = null;
+  let _keyboardNav = false; // true when arrow keys are driving selection
 
   // Org-scoped keys — each Salesforce org gets its own data
   function _orgKey(base) {
@@ -378,6 +379,18 @@ const SearchPalette = (() => {
     }
 
     // ─── Manual Search mode ───
+    // Check for instant action keywords (lightning/classic mode switch)
+    const instantResults = [];
+    _injectModeSwitcher(query, instantResults);
+    if (instantResults.length > 0) {
+      _currentResults = instantResults;
+      _selectedIndex = 0;
+      _renderResults(instantResults);
+      _statusBar.textContent = 'Press Enter to switch · or keep typing to search';
+      _setSearchBtnEnabled(true);
+      return;
+    }
+
     // Show typing hint — no API calls while typing
     _currentResults = [];
     _setSearchBtnEnabled(true);
@@ -483,6 +496,9 @@ const SearchPalette = (() => {
     // 1. Instant local index search (0 API calls)
     const results = SEARCH().searchAll(query, options);
     const elapsed = Math.round(performance.now() - start);
+
+    // Inject Lightning/Classic mode switcher action
+    _injectModeSwitcher(query, results);
 
     _currentResults = results;
     _selectedIndex = 0;
@@ -972,8 +988,12 @@ const SearchPalette = (() => {
         _selectResult(parseInt(el.dataset.index, 10));
       });
       el.addEventListener('mouseenter', () => {
+        if (_keyboardNav) return; // ignore hover while arrow keys are active
         _selectedIndex = parseInt(el.dataset.index, 10);
         _updateSelection();
+      });
+      el.addEventListener('mousemove', () => {
+        _keyboardNav = false; // mouse moved — user is using mouse again
       });
     });
 
@@ -1007,7 +1027,8 @@ const SearchPalette = (() => {
       'NamedCredential': I.lock, 'ConnectedApp': I.link, 'RemoteSiteSetting': I.globe,
       'CustomMetadata': I.file, 'CustomSetting': I.settings,
       'Tab': I.layout,
-      'Attribute': I.tag
+      'Attribute': I.tag,
+      'ModeSwitch': I.bolt
     };
     return map[type] || I.file;
   }
@@ -1041,20 +1062,35 @@ const SearchPalette = (() => {
 
   function _onKeyDown(e) {
     switch (e.key) {
-      case 'ArrowDown':
+      case 'ArrowDown': {
         e.preventDefault();
-        _selectedIndex = Math.min(_selectedIndex + 1, _currentResults.length - 1);
+        _keyboardNav = true;
+        const allItems = _resultsList.querySelectorAll('.sfdt-result');
+        const maxIdx = _currentResults.length > 0 ? _currentResults.length - 1 : allItems.length - 1;
+        _selectedIndex = Math.min(_selectedIndex + 1, maxIdx);
         _updateSelection();
         break;
-      case 'ArrowUp':
+      }
+      case 'ArrowUp': {
         e.preventDefault();
+        _keyboardNav = true;
         _selectedIndex = Math.max(_selectedIndex - 1, 0);
         _updateSelection();
         break;
+      }
       case 'Enter':
         e.preventDefault();
         if (_currentResults.length > 0 && _selectedIndex >= 0) {
           _selectResult(_selectedIndex, e.shiftKey);
+        } else if (_currentResults.length === 0) {
+          // History/favorites view — activate the selected item
+          const items = _resultsList.querySelectorAll('.sfdt-result');
+          const sel = items[_selectedIndex];
+          if (sel) {
+            sel.click();
+          } else if (_input.value.trim().length > 0) {
+            _performSearch(_input.value);
+          }
         } else if (_input.value.trim().length > 0) {
           _performSearch(_input.value);
         }
@@ -1069,6 +1105,92 @@ const SearchPalette = (() => {
         const currentIdx = filters.indexOf(_activeFilter || 'all');
         _setFilter(filters[(currentIdx + 1) % filters.length]);
         break;
+    }
+  }
+
+  // ─── Lightning / Classic Mode Switcher ─────────────────
+  function _isLightningMode() {
+    const base = window.SalesforceAPI?.getInstanceUrl?.() || '';
+    return base.includes('lightning.force.com')
+      || !!document.querySelector('one-app-nav-bar')
+      || window.location.pathname.startsWith('/lightning');
+  }
+
+  function _injectModeSwitcher(query, results) {
+    const q = query.toLowerCase().trim();
+    const isLightning = _isLightningMode();
+
+    // Match: "lightning", "light", "switch to lightning", "switch mode", "mode", "switch"
+    const lightningMatch = /^lig/.test(q) || /switch\s*(to\s*)?lig/i.test(q);
+    const classicMatch = /^cla/.test(q) || /switch\s*(to\s*)?cla/i.test(q);
+    // "switch" or "mode" alone — show the opposite mode as suggestion
+    const genericSwitch = /^(switch|mode)$/i.test(q) || /^switch\s*(to\s*)?$/i.test(q);
+
+    if (lightningMatch && !isLightning) {
+      // User is in Classic and typed "lightning" — offer switch to Lightning
+      results.unshift({
+        name: 'Switch to Lightning Experience',
+        type: 'ModeSwitch',
+        matchType: 'action',
+        targetMode: 'lightning',
+        score: 10000,
+        icon: '⚡'
+      });
+    } else if (lightningMatch && isLightning) {
+      // User is already in Lightning — show info
+      results.unshift({
+        name: 'Already in Lightning Experience',
+        type: 'ModeSwitch',
+        matchType: 'action',
+        targetMode: 'none',
+        score: 10000,
+        icon: '⚡'
+      });
+    }
+
+    if (classicMatch && isLightning) {
+      // User is in Lightning and typed "classic" — offer switch to Classic
+      results.unshift({
+        name: 'Switch to Salesforce Classic',
+        type: 'ModeSwitch',
+        matchType: 'action',
+        targetMode: 'classic',
+        score: 10000,
+        icon: '🔧'
+      });
+    } else if (classicMatch && !isLightning) {
+      // User is already in Classic — show info
+      results.unshift({
+        name: 'Already in Salesforce Classic',
+        type: 'ModeSwitch',
+        matchType: 'action',
+        targetMode: 'none',
+        score: 10000,
+        icon: '🔧'
+      });
+    }
+
+    // "switch" or "mode" alone — suggest switching to the other mode
+    if (genericSwitch && !lightningMatch && !classicMatch) {
+      if (isLightning) {
+        results.unshift({
+          name: 'Switch to Salesforce Classic',
+          type: 'ModeSwitch',
+          matchType: 'action',
+          targetMode: 'classic',
+          score: 10000,
+          icon: '🔧'
+        });
+      } else {
+        results.unshift({
+          name: 'Switch to Lightning Experience',
+          type: 'ModeSwitch',
+          matchType: 'action',
+          targetMode: 'lightning',
+          score: 10000,
+          icon: '⚡'
+        });
+      }
     }
   }
 
@@ -1090,6 +1212,22 @@ const SearchPalette = (() => {
   function _selectResult(index, newTab) {
     const result = _currentResults[index];
     if (!result) return;
+
+    // Handle Lightning/Classic mode switch action
+    if (result.type === 'ModeSwitch') {
+      if (result.targetMode === 'none') return; // already in that mode
+      const base = window.SalesforceAPI.getInstanceUrl();
+      if (result.targetMode === 'lightning') {
+        // Switch from Classic to Lightning
+        window.location.href = base.replace(/\.my\.salesforce\.com/, '.lightning.force.com') + '/one/one.app';
+      } else if (result.targetMode === 'classic') {
+        // Switch from Lightning to Classic — use the lex_fb_kicker to go to Classic home
+        const classicBase = base.replace('.lightning.force.com', '.my.salesforce.com');
+        window.location.href = `${classicBase}/ltng/switcher?destination=classic&retURL=%2Fhome%2Fhome.jsp`;
+      }
+      hide();
+      return;
+    }
 
     // Save search to history
     if (_input.value.trim()) {
@@ -1177,6 +1315,7 @@ const SearchPalette = (() => {
               <div class="sfdt-result-sub">${_escapeHTML(p.type || p.matchType || '')}</div>
             </div>
             <button class="sfdt-unpin-btn" data-pin-index="${i}" title="Unpin">${I.x}</button>
+            <button class="sfdt-result-newtab sfdt-pin-newtab" data-pin-index="${i}" title="Open in new tab">${I.externalLink}</button>
           </div>
         `).join('')}`;
       if (!showAll && hiddenCount > 0) {
@@ -1207,7 +1346,7 @@ const SearchPalette = (() => {
               <div class="sfdt-result-name">${_escapeHTML(r.name || r.id)}</div>
               <div class="sfdt-result-sub">${_escapeHTML(r.sobjectType || r.type || '')} · ${_timeAgo(r.timestamp)}</div>
             </div>
-            <span class="sfdt-result-arrow">${I.arrowRight}</span>
+            <button class="sfdt-result-newtab sfdt-recent-newtab" data-recent-index="${_recentRecords.indexOf(r)}" title="Open in new tab">${I.externalLink}</button>
           </div>`;
         } else {
           const h = item.data;
@@ -1232,10 +1371,24 @@ const SearchPalette = (() => {
 
     _resultsList.innerHTML = html;
 
+    // ── Arrow key navigation for history/favorites view ──
+    _selectedIndex = -1;
+    const allHistoryItems = _resultsList.querySelectorAll('.sfdt-result');
+    allHistoryItems.forEach((el, idx) => {
+      el.addEventListener('mouseenter', () => {
+        if (_keyboardNav) return;
+        _selectedIndex = idx;
+        _updateSelection();
+      });
+      el.addEventListener('mousemove', () => {
+        _keyboardNav = false;
+      });
+    });
+
     // ── Wire up handlers ──
     _resultsList.querySelectorAll('.sfdt-pinned-item').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('.sfdt-unpin-btn')) return;
+        if (e.target.closest('.sfdt-unpin-btn') || e.target.closest('.sfdt-pin-newtab')) return;
         const p = _pinnedItems[parseInt(el.dataset.pinIndex, 10)];
         if (p) _navigateToPinnedOrRecent(p);
       });
@@ -1270,9 +1423,26 @@ const SearchPalette = (() => {
     });
 
     _resultsList.querySelectorAll('.sfdt-recent-record').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.sfdt-recent-newtab')) return;
         const r = _recentRecords[parseInt(el.dataset.recentIndex, 10)];
         if (r) _navigateToPinnedOrRecent(r);
+      });
+    });
+
+    _resultsList.querySelectorAll('.sfdt-pin-newtab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const p = _pinnedItems[parseInt(btn.dataset.pinIndex, 10)];
+        if (p) _navigateToPinnedOrRecent(p, true);
+      });
+    });
+
+    _resultsList.querySelectorAll('.sfdt-recent-newtab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const r = _recentRecords[parseInt(btn.dataset.recentIndex, 10)];
+        if (r) _navigateToPinnedOrRecent(r, true);
       });
     });
 
@@ -1284,7 +1454,7 @@ const SearchPalette = (() => {
     });
   }
 
-  function _navigateToPinnedOrRecent(item) {
+  function _navigateToPinnedOrRecent(item, newTab) {
     const base = window.SalesforceAPI.getInstanceUrl();
     const isLightning = base.includes('lightning.force.com')
       || document.querySelector('one-app-nav-bar')
@@ -1299,13 +1469,16 @@ const SearchPalette = (() => {
       url = isLightning
         ? `${base}/lightning/setup/ObjectManager/${encodeURIComponent(item.entityName)}/FieldsAndRelationships/${encodeURIComponent(item.fieldApiName)}/view`
         : `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(item.entityName)}&setupid=CustomObjects`;
+    } else if (item.type === 'SetupPage' && item.path && item.classicPath) {
+      // SetupPage pins store both paths — pick the right one for current mode
+      url = isLightning ? `${base}${item.path}` : `${base}${item.classicPath}`;
     } else {
       // Use the same routing as normal search results
       url = META().getSetupUrl(item);
     }
     if (url) {
-      _openUrl(url, false);
-      hide();
+      _openUrl(url, !!newTab);
+      if (!newTab) hide();
     }
   }
 
@@ -1347,9 +1520,12 @@ const SearchPalette = (() => {
     });
   }
 
+  let _onboardingDismissed = false;
+
   function _showOnboardingIfNeeded() {
+    if (_onboardingDismissed) return;
     _storageGet(ONBOARD_KEY).then(val => {
-      if (val) return;
+      if (val) { _onboardingDismissed = true; return; }
       _renderOnboarding();
     });
   }
@@ -1388,6 +1564,7 @@ const SearchPalette = (() => {
 
     const dismiss = () => {
       overlay.remove();
+      _onboardingDismissed = true;
       _storageSet(ONBOARD_KEY, true);
       _input.focus();
     };

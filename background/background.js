@@ -5,7 +5,9 @@
 
 // Listen for keyboard commands defined in manifest.json
 chrome.commands.onCommand.addListener((command, tab) => {
-  if (!tab || !tab.id || !_isSalesforceTab(tab)) return;
+  if (!tab || !tab.id) return;
+  // Content script only runs on Salesforce pages, so just send the message.
+  // tab.url may be unavailable without "tabs" permission — don't check it here.
   chrome.tabs.sendMessage(tab.id, { action: command }).catch(() => {});
 });
 

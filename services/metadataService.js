@@ -812,7 +812,7 @@ const MetadataService = (() => {
       { name: 'Change Sets (Inbound)', setupId: 'InboundChangeSet' },
 
       // Security & Access
-      { name: 'Profiles', setupId: 'Profiles' },
+      { name: 'Profiles', setupId: 'EnhancedProfiles', classicPath: '/00e?setupid=EnhancedProfiles' },
       { name: 'Permission Sets', setupId: 'PermSets' },
       { name: 'Permission Set Groups', setupId: 'PermSetGroups' },
       { name: 'Users', setupId: 'ManageUsers' },
@@ -858,6 +858,10 @@ const MetadataService = (() => {
       { name: 'Company Information', setupId: 'CompanyProfileInfo' },
       { name: 'My Domain', setupId: 'OrgDomain' },
       { name: 'Sandboxes', setupId: 'DataManagementCreateTestInstance' },
+
+      // Personal
+      { name: 'Personal Setup', setupId: 'PersonalSetup', path: '/lightning/settings/personal/PersonalInformation/home', classicPath: '/ui/setup/Setup?setupid=PersonalSetup' },
+      { name: 'My Settings', setupId: 'PersonalSetup', path: '/lightning/settings/personal/PersonalInformation/home', classicPath: '/ui/setup/Setup?setupid=PersonalSetup' },
     ].map(s => ({
       name: s.name, type: 'SetupPage', icon: '\u2699', label: s.name,
       setupId: s.setupId,
@@ -920,7 +924,7 @@ const MetadataService = (() => {
         if (item.keyPrefix) return `${base}/lightning/setup/CustomSettings/page?address=%2Fsetup%2Fui%2FlistCustomSettingsData.apexp%3Fid%3D${item.keyPrefix}`;
         return `${base}/lightning/setup/CustomSettings/home`;
       case 'Profile':
-        return `${base}/lightning/setup/Profiles/page?address=%2F${item.id}`;
+        return `${base}/lightning/setup/EnhancedProfiles/page?address=%2F${item.id}`;
       case 'PermissionSet':
         return `${base}/lightning/setup/PermSets/page?address=%2F${item.id}`;
       case 'CustomMetadata':
