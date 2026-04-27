@@ -79,6 +79,11 @@ const SearchPalette = (() => {
       type: result.type,
       sobjectType: result.sobjectType || result.type,
       matchType: result.matchType,
+      url: result.url,
+      sobjectName: result.sobjectName,
+      path: result.path,
+      classicPath: result.classicPath,
+      keyPrefix: result.keyPrefix,
       timestamp: Date.now()
     };
     _recentRecords = _recentRecords.filter(r => r.id !== entry.id);
@@ -434,7 +439,7 @@ const SearchPalette = (() => {
     // Check if index is ready
     if (!META().isReady()) {
       _currentResults = [];
-      _resultsList.innerHTML = '<div class="sfdt-empty" style="color:#f9e2af">Metadata index is still loading...<br><span style="font-size:11px;color:#a6adc8">Please wait a few seconds and try again, or click Rebuild Index.</span></div>';
+      _resultsList.innerHTML = '<div class="sfdt-empty" style="color:#fbbf24">Metadata index is still loading...<br><span style="font-size:11px;color:#8b949e">Please wait a few seconds and try again, or click Rebuild Index.</span></div>';
       _statusBar.textContent = 'Indexing metadata...';
       META().onIndexReady(() => {
         if (_visible && _input && _input.value.trim().length > 0) {
@@ -449,7 +454,7 @@ const SearchPalette = (() => {
     const itemCount = Object.values(idx).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
     if (itemCount === 0) {
       _currentResults = [];
-      _resultsList.innerHTML = '<div class="sfdt-empty" style="color:#f9e2af">Metadata index is empty.<br><span style="font-size:11px;color:#a6adc8">This usually means the Salesforce session expired or API access is restricted.<br>Try clicking <strong>Rebuild Index</strong> below, or refresh the Salesforce page.</span></div>';
+      _resultsList.innerHTML = '<div class="sfdt-empty" style="color:#fbbf24">Metadata index is empty.<br><span style="font-size:11px;color:#8b949e">This usually means the Salesforce session expired or API access is restricted.<br>Try clicking <strong>Rebuild Index</strong> below, or refresh the Salesforce page.</span></div>';
       _statusBar.textContent = 'Index empty — click Rebuild Index';
       return;
     }
@@ -1280,10 +1285,26 @@ const SearchPalette = (() => {
 
   function _addToHistory(query, result) {
     _searchHistory = _searchHistory.filter(h => h.query !== query);
+    // Store enough of the result to navigate directly later (no re-search needed)
+    const target = result ? {
+      id: result.id,
+      name: result.name,
+      type: result.type,
+      sobjectType: result.sobjectType || result.type,
+      sobjectName: result.sobjectName,
+      matchType: result.matchType,
+      url: result.url,
+      path: result.path,
+      classicPath: result.classicPath,
+      entityName: result.entityName,
+      fieldApiName: result.fieldApiName,
+      keyPrefix: result.keyPrefix
+    } : null;
     _searchHistory.unshift({
       query,
-      resultName: result.name,
-      resultType: result.type,
+      resultName: result && result.name,
+      resultType: result && result.type,
+      target,
       timestamp: Date.now()
     });
     if (_searchHistory.length > MAX_HISTORY) _searchHistory.length = MAX_HISTORY;
@@ -1304,7 +1325,7 @@ const SearchPalette = (() => {
       const visiblePins = showAll ? _pinnedItems : _pinnedItems.slice(0, PINNED_COLLAPSED_COUNT);
       const hiddenCount = _pinnedItems.length - PINNED_COLLAPSED_COUNT;
       html += `
-        <div style="padding:6px 16px;font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:6px 16px;font-size:11px;color:#6e7681;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
           <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-flex;width:12px;height:12px">${I.pin}</span> Pinned Favorites (${_pinnedItems.length})</span>
         </div>
         ${visiblePins.map((p, i) => `
@@ -1319,9 +1340,9 @@ const SearchPalette = (() => {
           </div>
         `).join('')}`;
       if (!showAll && hiddenCount > 0) {
-        html += `<div class="sfdt-result" id="sfdt-show-more-pins" style="justify-content:center;cursor:pointer;color:#89b4fa;font-size:11px;padding:6px 16px">Show ${hiddenCount} more pinned items</div>`;
+        html += `<div class="sfdt-result" id="sfdt-show-more-pins" style="justify-content:center;cursor:pointer;color:#58a6ff;font-size:11px;padding:6px 16px">Show ${hiddenCount} more pinned items</div>`;
       } else if (_pinsExpanded && _pinnedItems.length > PINNED_COLLAPSED_COUNT) {
-        html += `<div class="sfdt-result" id="sfdt-show-less-pins" style="justify-content:center;cursor:pointer;color:#89b4fa;font-size:11px;padding:6px 16px">Show less</div>`;
+        html += `<div class="sfdt-result" id="sfdt-show-less-pins" style="justify-content:center;cursor:pointer;color:#58a6ff;font-size:11px;padding:6px 16px">Show less</div>`;
       }
     }
 
@@ -1332,7 +1353,7 @@ const SearchPalette = (() => {
 
     if (recentItems.length > 0) {
       html += `
-        <div style="padding:6px 16px;font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:6px 16px;font-size:11px;color:#6e7681;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
           <span>Recent</span>
           <button class="sfdt-btn sfdt-btn-sm" id="sfdt-clear-all-recent" style="font-size:10px">${I.x} Clear</button>
         </div>`;
@@ -1351,6 +1372,7 @@ const SearchPalette = (() => {
         } else {
           const h = item.data;
           const hIdx = _searchHistory.indexOf(h);
+          const hasTarget = !!(h.target && (h.target.id || h.target.url || h.target.path));
           html += `
           <div class="sfdt-result sfdt-history-item" data-query="${_escapeHTML(h.query)}" data-index="${hIdx}">
             <span class="sfdt-result-icon">${I.clock}</span>
@@ -1358,7 +1380,9 @@ const SearchPalette = (() => {
               <div class="sfdt-result-name">${_escapeHTML(h.query)}</div>
               <div class="sfdt-result-sub">${_escapeHTML(h.resultName || '')} · ${_escapeHTML(h.resultType || '')}</div>
             </div>
-            <span class="sfdt-result-arrow">${I.arrowRight}</span>
+            ${hasTarget
+              ? `<button class="sfdt-result-newtab sfdt-history-newtab" data-history-index="${hIdx}" title="Open in new tab">${I.externalLink}</button>`
+              : `<span class="sfdt-result-arrow" title="Re-run search">${I.arrowRight}</span>`}
           </div>`;
         }
       });
@@ -1447,9 +1471,27 @@ const SearchPalette = (() => {
     });
 
     _resultsList.querySelectorAll('.sfdt-history-item').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.sfdt-history-newtab')) return;
+        const idx = parseInt(el.dataset.index, 10);
+        const h = _searchHistory[idx];
+        // If the entry has a stored navigation target, navigate directly (no re-search).
+        // Old entries without a target fall back to re-running the search.
+        if (h && h.target && (h.target.id || h.target.url || h.target.path)) {
+          _navigateToPinnedOrRecent(h.target, false);
+          return;
+        }
         _input.value = el.dataset.query;
         _performSearch(el.dataset.query);
+      });
+    });
+
+    _resultsList.querySelectorAll('.sfdt-history-newtab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.historyIndex, 10);
+        const h = _searchHistory[idx];
+        if (h && h.target) _navigateToPinnedOrRecent(h.target, true);
       });
     });
   }
@@ -1469,6 +1511,9 @@ const SearchPalette = (() => {
       url = isLightning
         ? `${base}/lightning/setup/ObjectManager/${encodeURIComponent(item.entityName)}/FieldsAndRelationships/${encodeURIComponent(item.fieldApiName)}/view`
         : `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(item.entityName)}&setupid=CustomObjects`;
+    } else if (item.type === 'Tab' && item.url) {
+      // Tab items: use the stored url directly
+      url = item.url.startsWith('http') ? item.url : `${base}${item.url}`;
     } else if (item.type === 'SetupPage' && item.path && item.classicPath) {
       // SetupPage pins store both paths — pick the right one for current mode
       url = isLightning ? `${base}${item.path}` : `${base}${item.classicPath}`;

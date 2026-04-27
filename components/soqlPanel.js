@@ -107,9 +107,9 @@ const SOQLPanel = (() => {
           </div>
           <div class="sfdt-soql-results" id="soql-results">
             <div class="sfdt-soql-placeholder">
-              <div style="margin-bottom:12px;font-size:15px;color:#89b4fa;font-weight:600">SOQL Query Tool</div>
-              <div style="margin-bottom:8px;color:#a6adc8">Write a SOQL query and press <strong style="color:#cdd6f4">Ctrl+Enter</strong> to execute.</div>
-              <div style="color:#7f849c;font-size:12px">Check the <strong>Examples</strong> tab for sample queries to get started.</div>
+              <div style="margin-bottom:12px;font-size:15px;color:#58a6ff;font-weight:600">SOQL Query Tool</div>
+              <div style="margin-bottom:8px;color:#8b949e">Write a SOQL query and press <strong style="color:#e1e4e8">Ctrl+Enter</strong> to execute.</div>
+              <div style="color:#6e7681;font-size:12px">Check the <strong>Examples</strong> tab for sample queries to get started.</div>
             </div>
           </div>
           <div class="sfdt-soql-history-area" id="soql-history-area" style="display:none"></div>
@@ -207,20 +207,20 @@ const SOQLPanel = (() => {
     const I = ICONS();
 
     if (history.length === 0) {
-      dropdown.innerHTML = '<div style="padding:20px;text-align:center;color:#7f849c;font-size:12px">No query history yet.<br>Run a query and it will appear here.</div>';
+      dropdown.innerHTML = '<div style="padding:20px;text-align:center;color:#6e7681;font-size:12px">No query history yet.<br>Run a query and it will appear here.</div>';
       return;
     }
 
     dropdown.innerHTML = `
       <div class="sfdt-hd-header">
-        <span style="font-weight:600;color:#89b4fa;font-size:12px">Query History (${history.length})</span>
+        <span style="font-weight:600;color:#58a6ff;font-size:12px">Query History (${history.length})</span>
         <button class="sfdt-btn sfdt-btn-sm" id="soql-hd-clear">${I.x} Clear</button>
       </div>
       <div class="sfdt-hd-list">
         ${history.slice(0, 30).map((h, i) => `
           <div class="sfdt-hd-item" data-index="${i}">
             <div class="sfdt-hd-item-main">
-              <span class="sfdt-hd-status" style="color:${h.success ? '#a6e3a1' : '#f38ba8'}">${h.success ? '✓' : '✕'}</span>
+              <span class="sfdt-hd-status" style="color:${h.success ? '#22c55e' : '#f85149'}">${h.success ? '✓' : '✕'}</span>
               <pre class="sfdt-hd-query">${_esc(h.query)}</pre>
             </div>
             <div class="sfdt-hd-item-meta">
@@ -231,7 +231,7 @@ const SOQLPanel = (() => {
             </div>
           </div>
         `).join('')}
-        ${history.length > 30 ? `<div style="padding:8px 12px;text-align:center;color:#585b70;font-size:11px">+${history.length - 30} more — open History tab to see all</div>` : ''}
+        ${history.length > 30 ? `<div style="padding:8px 12px;text-align:center;color:#383e4a;font-size:11px">+${history.length - 30} more — open History tab to see all</div>` : ''}
       </div>
     `;
 
@@ -745,16 +745,16 @@ const SOQLPanel = (() => {
     // Build detail row with all field:value pairs for expand view
     const detailPairs = keys
       .filter(k => flatRecord[k] !== null && flatRecord[k] !== undefined)
-      .map(k => `<div style="display:flex;gap:8px;padding:2px 0"><span style="color:#89b4fa;min-width:160px;font-weight:500">${_esc(k)}</span><span style="color:#cdd6f4;word-break:break-all">${_formatCellValue(k, flatRecord[k])}</span></div>`)
+      .map(k => `<div style="display:flex;gap:8px;padding:2px 0"><span style="color:#58a6ff;min-width:160px;font-weight:500">${_esc(k)}</span><span style="color:#e1e4e8;word-break:break-all">${_formatCellValue(k, flatRecord[k])}</span></div>`)
       .join('');
 
     return `<tr class="sfdt-row-main" data-row-index="${rowIndex}" style="cursor:pointer">
-      <td style="width:20px;text-align:center;padding:0 4px;color:#7f849c" class="sfdt-row-toggle">▸</td>
+      <td style="width:20px;text-align:center;padding:0 4px;color:#6e7681" class="sfdt-row-toggle">▸</td>
       ${cells}
       ${actionsCell}
     </tr>
     <tr class="sfdt-row-detail" data-row-index="${rowIndex}" style="display:none">
-      <td colspan="${keys.length + 1 + (_queriedSObjectType && !_isToolingQuery ? 1 : 0)}" style="padding:8px 16px;background:#1e1e2e;border-bottom:1px solid #313244">
+      <td colspan="${keys.length + 1 + (_queriedSObjectType && !_isToolingQuery ? 1 : 0)}" style="padding:8px 16px;background:#0f1419;border-bottom:1px solid #2d333b">
         <div style="font-family:var(--mono);font-size:11px;max-height:300px;overflow-y:auto">${detailPairs}</div>
       </td>
     </tr>`;
@@ -766,21 +766,21 @@ const SOQLPanel = (() => {
       return '<span class="sfdt-null">null</span>';
     }
     if (typeof val === 'object') {
-      return `<span style="font-family:var(--mono);font-size:11px;color:#7f849c">${_esc(JSON.stringify(val))}</span>`;
+      return `<span style="font-family:var(--mono);font-size:11px;color:#6e7681">${_esc(JSON.stringify(val))}</span>`;
     }
     const str = String(val);
     // Salesforce 15 or 18 char ID — make clickable
     if (_isSalesforceId(key, str)) {
       const base = window.SalesforceAPI?.getInstanceUrl() || '';
-      return `<a href="${base}/${_esc(str)}" target="_blank" rel="noopener" style="color:#89b4fa;text-decoration:underline;cursor:pointer" title="Open record">${_esc(str)}</a>`;
+      return `<a href="${base}/${_esc(str)}" target="_blank" rel="noopener" style="color:#58a6ff;text-decoration:underline;cursor:pointer" title="Open record">${_esc(str)}</a>`;
     }
     // URL values — make clickable
     if (/^https?:\/\//i.test(str)) {
-      return `<a href="${_esc(str)}" target="_blank" rel="noopener" style="color:#89b4fa;text-decoration:underline;cursor:pointer" title="Open URL">${_esc(str.length > 60 ? str.substring(0, 57) + '...' : str)}</a>`;
+      return `<a href="${_esc(str)}" target="_blank" rel="noopener" style="color:#58a6ff;text-decoration:underline;cursor:pointer" title="Open URL">${_esc(str.length > 60 ? str.substring(0, 57) + '...' : str)}</a>`;
     }
     // Boolean styling
     if (str === 'true' || str === 'false') {
-      return `<span style="color:${str === 'true' ? '#a6e3a1' : '#f38ba8'}">${str}</span>`;
+      return `<span style="color:${str === 'true' ? '#22c55e' : '#f85149'}">${str}</span>`;
     }
     return _esc(str);
   }
@@ -824,7 +824,7 @@ const SOQLPanel = (() => {
     const plan = QS().getQueryPlan(soql);
 
     if (plan.hints.length === 0) {
-      hints.innerHTML = '<div class="sfdt-hint sfdt-hint-success" style="color:#a6e3a1">Query looks good!</div>';
+      hints.innerHTML = '<div class="sfdt-hint sfdt-hint-success" style="color:#22c55e">Query looks good!</div>';
     } else {
       hints.innerHTML = plan.hints.map(h => `
         <div class="sfdt-hint sfdt-hint-${h.severity}">
@@ -838,11 +838,11 @@ const SOQLPanel = (() => {
 
     hints.innerHTML += `
       <div class="sfdt-query-plan">
-        <div><strong style="color:#89b4fa">Object:</strong> ${_esc(plan.object)}</div>
-        <div><strong style="color:#89b4fa">WHERE:</strong> ${plan.hasWhereClause ? 'Yes' : 'No'}</div>
-        <div><strong style="color:#89b4fa">LIMIT:</strong> ${plan.hasLimit ? 'Yes' : 'No'}</div>
-        <div><strong style="color:#89b4fa">ORDER BY:</strong> ${plan.hasOrderBy ? 'Yes' : 'No'}</div>
-        <div><strong style="color:#89b4fa">Subqueries:</strong> ${plan.subqueryCount}</div>
+        <div><strong style="color:#58a6ff">Object:</strong> ${_esc(plan.object)}</div>
+        <div><strong style="color:#58a6ff">WHERE:</strong> ${plan.hasWhereClause ? 'Yes' : 'No'}</div>
+        <div><strong style="color:#58a6ff">LIMIT:</strong> ${plan.hasLimit ? 'Yes' : 'No'}</div>
+        <div><strong style="color:#58a6ff">ORDER BY:</strong> ${plan.hasOrderBy ? 'Yes' : 'No'}</div>
+        <div><strong style="color:#58a6ff">Subqueries:</strong> ${plan.subqueryCount}</div>
       </div>
     `;
   }
@@ -880,14 +880,14 @@ const SOQLPanel = (() => {
     const I = ICONS();
     area.innerHTML = `
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="color:#89b4fa;font-weight:600;font-size:13px">${I.bolt} Built-in Example Queries</span>
-        <span style="color:#7f849c;font-size:11px">(click to load into editor)</span>
+        <span style="color:#58a6ff;font-weight:600;font-size:13px">${I.bolt} Built-in Example Queries</span>
+        <span style="color:#6e7681;font-size:11px">(click to load into editor)</span>
       </div>
       ${EXAMPLE_QUERIES.map((ex, i) => `
         <div class="sfdt-soql-history-item" style="cursor:pointer" data-index="${i}">
           <div class="sfdt-soql-history-query" style="pointer-events:none">
-            <strong style="color:#89b4fa;font-size:12px">${_esc(ex.name)}</strong>
-            <pre style="color:#cdd6f4;margin-top:4px">${_esc(ex.query)}</pre>
+            <strong style="color:#58a6ff;font-size:12px">${_esc(ex.name)}</strong>
+            <pre style="color:#e1e4e8;margin-top:4px">${_esc(ex.query)}</pre>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;pointer-events:auto">
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-primary example-load" data-index="${i}">${I.play} Load</button>
@@ -936,14 +936,14 @@ const SOQLPanel = (() => {
     const favs = QS().getFavorites();
     const I = ICONS();
     if (favs.length === 0) {
-      area.innerHTML = `<div class="sfdt-soql-empty">No saved queries yet.<br><span style="color:#7f849c;font-size:11px">Use ${I.star} Save in the toolbar to add favorites.</span></div>`;
+      area.innerHTML = `<div class="sfdt-soql-empty">No saved queries yet.<br><span style="color:#6e7681;font-size:11px">Use ${I.star} Save in the toolbar to add favorites.</span></div>`;
       return;
     }
     area.innerHTML = favs.map((f, i) => `
       <div class="sfdt-soql-history-item">
         <div class="sfdt-soql-history-query">
-          <strong style="color:#89b4fa">${_esc(f.name)}</strong>
-          <pre style="color:#cdd6f4">${_esc(f.query)}</pre>
+          <strong style="color:#58a6ff">${_esc(f.name)}</strong>
+          <pre style="color:#e1e4e8">${_esc(f.query)}</pre>
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0">
           <button class="sfdt-btn sfdt-btn-sm sfdt-btn-primary fav-load" data-index="${i}">${I.play} Load</button>
@@ -974,20 +974,20 @@ const SOQLPanel = (() => {
     const history = QS().getHistory();
     const I = ICONS();
     if (history.length === 0) {
-      area.innerHTML = '<div class="sfdt-soql-empty">No query history yet.<br><span style="color:#7f849c;font-size:11px">Run a query and it will appear here.</span></div>';
+      area.innerHTML = '<div class="sfdt-soql-empty">No query history yet.<br><span style="color:#6e7681;font-size:11px">Run a query and it will appear here.</span></div>';
       return;
     }
     area.innerHTML = `
-      <div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:12px;color:#a6adc8;border-bottom:1px solid var(--border);align-items:center">
+      <div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:12px;color:#8b949e;border-bottom:1px solid var(--border);align-items:center">
         <span style="font-weight:600">${history.length} queries in history</span>
         <button class="sfdt-btn sfdt-btn-sm" id="soql-clear-history">${I.x} Clear All</button>
       </div>
       ${history.slice(0, 50).map((h, i) => `
         <div class="sfdt-soql-history-item ${h.success ? '' : 'error-item'}" data-query-index="${i}">
           <div class="sfdt-soql-history-query">
-            <pre style="color:#cdd6f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${_esc(h.query.length > 80 ? h.query.substring(0, 80) + '...' : h.query)}</pre>
+            <pre style="color:#e1e4e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${_esc(h.query.length > 80 ? h.query.substring(0, 80) + '...' : h.query)}</pre>
             <div class="sfdt-soql-history-meta">
-              <span style="color:${h.success ? '#a6e3a1' : '#f38ba8'}">${h.success ? 'OK' : 'ERR'}</span>
+              <span style="color:${h.success ? '#22c55e' : '#f85149'}">${h.success ? 'OK' : 'ERR'}</span>
               <span>${h.resultCount || 0} records</span>
               <span>${h.executionTime}ms</span>
               <span>${_formatTime(h.timestamp)}</span>
@@ -1008,7 +1008,7 @@ const SOQLPanel = (() => {
         const query = history[idx]?.query;
         if (!query) return;
         clearTimeout(tooltipTimeout);
-        tooltip.innerHTML = `<pre style="margin:0;font-family:var(--mono);font-size:12px;color:#cdd6f4;white-space:pre-wrap;word-break:break-all">${_esc(query)}</pre>`;
+        tooltip.innerHTML = `<pre style="margin:0;font-family:var(--mono);font-size:12px;color:#e1e4e8;white-space:pre-wrap;word-break:break-all">${_esc(query)}</pre>`;
         tooltip.style.display = 'block';
         // Position near the item
         const itemRect = item.getBoundingClientRect();
@@ -1208,7 +1208,7 @@ const SOQLPanel = (() => {
     }
 
     if (allFields.length === 0) {
-      modal.querySelector('.sfdt-crud-body').innerHTML = '<div style="padding:16px;color:#7f849c;text-align:center">No writable fields found for this object.</div>';
+      modal.querySelector('.sfdt-crud-body').innerHTML = '<div style="padding:16px;color:#6e7681;text-align:center">No writable fields found for this object.</div>';
       return;
     }
 
@@ -1225,7 +1225,7 @@ const SOQLPanel = (() => {
 
       return `<div class="sfdt-crud-field">
         <label class="sfdt-crud-label" title="${_esc(f.name)}${typeHint}">
-          ${required ? '<span style="color:#f38ba8">*</span> ' : ''}${_esc(f.label || f.name)}
+          ${required ? '<span style="color:#f85149">*</span> ' : ''}${_esc(f.label || f.name)}
         </label>
         <input type="text" class="sfdt-crud-input ${required ? 'sfdt-crud-required' : ''}" 
                data-field="${_esc(f.name)}" data-type="${_esc(fieldType)}"
@@ -1239,9 +1239,9 @@ const SOQLPanel = (() => {
        <div class="sfdt-crud-modal" style="padding:10px !important">
         <div class="sfdt-crud-header">
           <span class="sfdt-crud-title">${title}</span>
-          <span style="font-size:11px;color:#7f849c;margin-left:8px">${allFields.length} fields${allFields.filter(f => !f.nillable && !f.defaultedOnCreate).length > 0 ? ' · <span style="color:#f38ba8">* = required</span>' : ''}</span>
+          <span style="font-size:11px;color:#6e7681;margin-left:8px">${allFields.length} fields${allFields.filter(f => !f.nillable && !f.defaultedOnCreate).length > 0 ? ' · <span style="color:#f85149">* = required</span>' : ''}</span>
           <div style="display:flex;gap:6px;margin-left:auto">
-            <input type="text" class="sfdt-crud-filter" placeholder="Filter fields..." style="padding:4px 10px;background:var(--bg);color:#cdd6f4;border:1px solid var(--border);border-radius:4px;font-size:12px;width:160px;outline:none" />
+            <input type="text" class="sfdt-crud-filter" placeholder="Filter fields..." style="padding:4px 10px;background:var(--bg);color:#e1e4e8;border:1px solid var(--border);border-radius:4px;font-size:12px;width:160px;outline:none" />
             <button class="sfdt-btn sfdt-btn-primary sfdt-crud-save">${ICONS().check} ${isNew ? 'Create' : 'Save'}</button>
             <button class="sfdt-btn sfdt-crud-cancel">${ICONS().x} Cancel</button>
           </div>
@@ -1294,32 +1294,32 @@ const SOQLPanel = (() => {
 
       if (Object.keys(data).length === 0) {
         msgEl.textContent = 'No fields to save.';
-        msgEl.style.color = '#f9e2af';
+        msgEl.style.color = '#fbbf24';
         return;
       }
 
       msgEl.textContent = isNew ? 'Creating record...' : 'Saving...';
-      msgEl.style.color = '#89b4fa';
+      msgEl.style.color = '#58a6ff';
 
       try {
         const API = window.SalesforceAPI;
         if (isNew) {
           const result = await API.restPost(_queriedSObjectType, data);
           msgEl.textContent = `Created! ID: ${result.id || result.Id || 'OK'}`;
-          msgEl.style.color = '#a6e3a1';
+          msgEl.style.color = '#22c55e';
           _statusBar.textContent = `Record created successfully`;
           setTimeout(() => { modal.remove(); _rerunLastQuery(); }, 1000);
         } else {
           const recordId = record.Id || record.id;
-          if (!recordId) { msgEl.textContent = 'No Id found for update.'; msgEl.style.color = '#f38ba8'; return; }
+          if (!recordId) { msgEl.textContent = 'No Id found for update.'; msgEl.style.color = '#f85149'; return; }
           await API.restPatch(_queriedSObjectType, recordId, data);
           msgEl.textContent = 'Saved successfully!';
-          msgEl.style.color = '#a6e3a1';
+          msgEl.style.color = '#22c55e';
           _statusBar.textContent = `Record ${recordId} updated`;
           setTimeout(() => { modal.remove(); _rerunLastQuery(); }, 1000);
         }
       } catch (err) {
-        msgEl.innerHTML = `<div style="color:#f38ba8;white-space:pre-wrap;max-height:120px;overflow-y:auto;font-size:12px"><strong>Error:</strong> ${_esc(_parseApiError(err.message))}</div>`;
+        msgEl.innerHTML = `<div style="color:#f85149;white-space:pre-wrap;max-height:120px;overflow-y:auto;font-size:12px"><strong>Error:</strong> ${_esc(_parseApiError(err.message))}</div>`;
       }
     });
   }

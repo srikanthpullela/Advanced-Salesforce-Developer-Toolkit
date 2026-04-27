@@ -229,10 +229,10 @@ const InspectorPanel = (() => {
       compareBanner = `
         <div class="sfdt-compare-banner">
           <div class="sfdt-compare-banner-left">
-            <span style="font-weight:600;color:#89b4fa">Comparing Records</span>
+            <span style="font-weight:600;color:#58a6ff">Comparing Records</span>
             <span class="sfdt-compare-ids">
               <span class="sfdt-compare-label-a" title="Current record">A: ${_esc(String(_recordId).substring(0, 15))}</span>
-              <span style="color:#585b70">vs</span>
+              <span style="color:#383e4a">vs</span>
               <span class="sfdt-compare-label-b" title="Compare record">B: ${_esc(String(compareId).substring(0, 15))}</span>
             </span>
           </div>
@@ -468,7 +468,7 @@ const InspectorPanel = (() => {
     let compareInfo = '';
     if (_compareRecord) {
       const compareId = _compareRecord.Id || _compareRecord.id || '?';
-      compareInfo = `<span style="color:#cba6f7">Comparing with ${_esc(String(compareId).substring(0, 15))}</span>`;
+      compareInfo = `<span style="color:#c084fc">Comparing with ${_esc(String(compareId).substring(0, 15))}</span>`;
 
       // Update compare button visual
       const compareBtn = _container.querySelector('#insp-compare');
@@ -519,13 +519,13 @@ const InspectorPanel = (() => {
     overlay.className = 'sfdt-json-overlay sfdt-impact-overlay';
     overlay.innerHTML = `
       <div class="sfdt-json-dialog" style="max-width:600px;width:90%">
-        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px !important;background:var(--bg2,#252536);border-bottom:1px solid var(--border,#45475a)">
-          <span style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#89b4fa;flex-shrink:0">${I.impact}</span>
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px !important;background:var(--bg2,#1a1f2e);border-bottom:1px solid var(--border,#2d333b)">
+          <span style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#58a6ff;flex-shrink:0">${I.impact}</span>
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;color:#cdd6f4">Field Impact Analysis</div>
-            <div style="font-size:11px;color:#a6adc8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              <span style="color:#89b4fa">${_esc(fieldLabel)}</span>
-              <span style="color:#585b70;margin:0 4px">·</span>
+            <div style="font-size:13px;font-weight:600;color:#e1e4e8">Field Impact Analysis</div>
+            <div style="font-size:11px;color:#8b949e;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              <span style="color:#58a6ff">${_esc(fieldLabel)}</span>
+              <span style="color:#383e4a;margin:0 4px">·</span>
               <span style="font-family:var(--sfdt-mono,monospace);font-size:10px">${_esc(qualifiedName)}</span>
             </div>
           </div>
@@ -642,16 +642,16 @@ const InspectorPanel = (() => {
     let errorBanner = '';
     if (results.errors && results.errors.length > 0) {
       errorBanner = `
-        <div style="margin-bottom:10px;padding:6px 10px;background:rgba(243,139,168,0.1);border:1px solid rgba(243,139,168,0.2);border-radius:6px;font-size:11px;color:#f38ba8">
+        <div style="margin-bottom:10px;padding:6px 10px;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);border-radius:6px;font-size:11px;color:#f85149">
           Some queries failed: ${results.errors.map(e => _esc(e)).join('; ')}
         </div>
       `;
     }
 
     let html = errorBanner + `
-      <div style="margin-bottom:12px;padding:8px 12px;background:rgba(137,180,250,0.08);border:1px solid rgba(137,180,250,0.15);border-radius:6px;font-size:12px;color:#cdd6f4;display:flex;align-items:center;gap:8px">
-        <span style="width:14px;height:14px;display:inline-flex;color:#89b4fa;flex-shrink:0">${I.impact}</span>
-        <span><strong style="color:#89b4fa">${totalRefs}</strong> reference${totalRefs !== 1 ? 's' : ''} found across metadata</span>
+      <div style="margin-bottom:12px;padding:8px 12px;background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.15);border-radius:6px;font-size:12px;color:#e1e4e8;display:flex;align-items:center;gap:8px">
+        <span style="width:14px;height:14px;display:inline-flex;color:#58a6ff;flex-shrink:0">${I.impact}</span>
+        <span><strong style="color:#58a6ff">${totalRefs}</strong> reference${totalRefs !== 1 ? 's' : ''} found across metadata</span>
       </div>
     `;
 
@@ -697,9 +697,9 @@ const InspectorPanel = (() => {
 
     if (totalRefs === 0) {
       html = `
-        <div style="text-align:center;padding:28px 16px;color:#7f849c">
-          <div style="width:36px;height:36px;margin:0 auto 10px !important;color:#a6e3a1;opacity:0.7">${I.check}</div>
-          <div style="font-size:13px;color:#a6e3a1;font-weight:600;margin-bottom:4px">No References Found</div>
+        <div style="text-align:center;padding:28px 16px;color:#6e7681">
+          <div style="width:36px;height:36px;margin:0 auto 10px !important;color:#22c55e;opacity:0.7">${I.check}</div>
+          <div style="font-size:13px;color:#22c55e;font-weight:600;margin-bottom:4px">No References Found</div>
           <div style="font-size:11px;line-height:1.5">This field is not referenced in any<br>Apex classes, triggers, or validation rules.</div>
         </div>
       `;
@@ -711,21 +711,21 @@ const InspectorPanel = (() => {
   function _renderImpactSection(title, icon, items) {
     return `
       <div style="margin-bottom:16px">
-        <div style="font-size:11px;color:#7f849c;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <div style="font-size:11px;color:#6e7681;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
           <span style="width:16px;height:16px;display:inline-flex">${icon}</span>
           ${title} (${items.length})
         </div>
         ${items.map(item => `
-          <div style="padding:6px 12px;background:#252536;border-radius:4px;margin-bottom:4px;font-size:12px">
+          <div style="padding:6px 12px;background:#1a1f2e;border-radius:4px;margin-bottom:4px;font-size:12px">
             <div style="display:flex;align-items:center;justify-content:space-between">
-              <span style="color:#cdd6f4;font-weight:500">
-                ${item.url ? `<a href="${item.url}" target="_blank" style="color:#89b4fa;text-decoration:none">${_esc(item.name)}</a>` : _esc(item.name)}
+              <span style="color:#e1e4e8;font-weight:500">
+                ${item.url ? `<a href="${item.url}" target="_blank" style="color:#58a6ff;text-decoration:none">${_esc(item.name)}</a>` : _esc(item.name)}
               </span>
-              ${item.status ? `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${item.status === 'Active' ? '#a6e3a120' : '#45475a'};color:${item.status === 'Active' ? '#a6e3a1' : '#7f849c'}">${item.status}</span>` : ''}
+              ${item.status ? `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${item.status === 'Active' ? '#22c55e20' : '#2d333b'};color:${item.status === 'Active' ? '#22c55e' : '#6e7681'}">${item.status}</span>` : ''}
             </div>
             ${(item.lines || []).map(l => `
-              <div style="font-family:var(--sfdt-mono);font-size:10px;color:#a6adc8;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                ${l.lineNum ? `<span style="color:#585b70;margin-right:6px">L${l.lineNum}</span>` : ''}${_esc(l.text)}
+              <div style="font-family:var(--sfdt-mono);font-size:10px;color:#8b949e;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${l.lineNum ? `<span style="color:#383e4a;margin-right:6px">L${l.lineNum}</span>` : ''}${_esc(l.text)}
               </div>
             `).join('')}
           </div>
@@ -749,15 +749,15 @@ const InspectorPanel = (() => {
       _container.querySelector('#insp-body').innerHTML = `
         <div style="padding:24px 16px;text-align:center">
           <div style="font-size:36px;margin-bottom:12px;opacity:0.5">${I.eye}</div>
-          <div style="color:#cdd6f4;font-size:14px;font-weight:600;margin-bottom:8px">No Record Detected</div>
-          <div style="color:#7f849c;font-size:12px;line-height:1.6">
-            Inspector works on <strong style="color:#89b4fa">record pages</strong> only.<br>
+          <div style="color:#e1e4e8;font-size:14px;font-weight:600;margin-bottom:8px">No Record Detected</div>
+          <div style="color:#6e7681;font-size:12px;line-height:1.6">
+            Inspector works on <strong style="color:#58a6ff">record pages</strong> only.<br>
             Navigate to an Account, Contact, Case, or any object record to inspect its fields.<br><br>
-            <span style="color:#f9e2af">Example URLs that work:</span><br>
-            <code style="font-size:11px;color:#a6adc8">/lightning/r/Account/001.../view</code><br>
-            <code style="font-size:11px;color:#a6adc8">/001xxx (Classic)</code><br>
-            <code style="font-size:11px;color:#a6adc8">/apex/SomePage?id=001xxx (Visualforce)</code><br><br>
-            <span style="color:#7f849c;font-size:11px">Current URL: ${_esc(window.location.pathname + window.location.search)}</span>
+            <span style="color:#fbbf24">Example URLs that work:</span><br>
+            <code style="font-size:11px;color:#8b949e">/lightning/r/Account/001.../view</code><br>
+            <code style="font-size:11px;color:#8b949e">/001xxx (Classic)</code><br>
+            <code style="font-size:11px;color:#8b949e">/apex/SomePage?id=001xxx (Visualforce)</code><br><br>
+            <span style="color:#6e7681;font-size:11px">Current URL: ${_esc(window.location.pathname + window.location.search)}</span>
           </div>
         </div>`;
       _container.querySelector('#insp-footer').innerHTML = '';

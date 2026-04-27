@@ -7,27 +7,27 @@
 /* ─── CSS Variables ──────────────────────────────────── */
 
 :root {
-  --sfdt-bg: #1e1e2e;
-  --sfdt-bg2: #252536;
-  --sfdt-bg3: #2d2d44;
-  --sfdt-bg-hover: #363652;
-  --sfdt-bg-selected: #3d3d5c;
-  --sfdt-fg: #cdd6f4;
-  --sfdt-fg2: #a6adc8;
-  --sfdt-fg3: #7f849c;
-  --sfdt-accent: #89b4fa;
-  --sfdt-accent2: #74c7ec;
-  --sfdt-green: #a6e3a1;
-  --sfdt-red: #f38ba8;
-  --sfdt-yellow: #f9e2af;
-  --sfdt-orange: #fab387;
-  --sfdt-purple: #cba6f7;
-  --sfdt-border: #45475a;
-  --sfdt-border-light: #585b70;
-  --sfdt-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --sfdt-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --sfdt-radius: 8px;
-  --sfdt-radius-sm: 4px;
+  --sfdt-bg: #0f1419;
+  --sfdt-bg2: #1a1f2e;
+  --sfdt-bg3: #141925;
+  --sfdt-bg-hover: #1c2333;
+  --sfdt-bg-selected: #1c2333;
+  --sfdt-fg: #e1e4e8;
+  --sfdt-fg2: #8b949e;
+  --sfdt-fg3: #6e7681;
+  --sfdt-accent: #58a6ff;
+  --sfdt-accent2: #58a6ff;
+  --sfdt-green: #22c55e;
+  --sfdt-red: #f85149;
+  --sfdt-yellow: #fbbf24;
+  --sfdt-orange: #d29922;
+  --sfdt-purple: #c084fc;
+  --sfdt-border: #2d333b;
+  --sfdt-border-light: #383e4a;
+  --sfdt-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --sfdt-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --sfdt-radius: 16px;
+  --sfdt-radius-sm: 8px;
   --sfdt-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --sfdt-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
   --sfdt-z-toolbar: 99990;
@@ -70,7 +70,7 @@
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
 .sfdt-palette-dialog {
@@ -1241,20 +1241,20 @@
 .sfdt-toolbar-toggle {
   width: 48px;
   height: 48px;
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  background: linear-gradient(135deg, #2563eb, #58a6ff);
   border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 16px rgba(88, 166, 255, 0.4);
   transition: transform 0.2s, box-shadow 0.2s;
   border: none;
 }
 
 .sfdt-toolbar-toggle:hover {
   transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 6px 24px rgba(88, 166, 255, 0.5);
 }
 
 .sfdt-toolbar-logo {

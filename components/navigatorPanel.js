@@ -316,6 +316,9 @@ const NavigatorPanel = (() => {
         case 'ArrowUp': e.preventDefault(); _selectedIndex = Math.max(_selectedIndex - 1, 0); _updateDrilldownSelection(); break;
         case 'Enter': e.preventDefault(); _selectDrilldownItem(_selectedIndex); break;
         case 'Escape': e.preventDefault(); _closeDrilldown(); break;
+        case 'ArrowLeft':
+          if (_input.value === '') { e.preventDefault(); _closeDrilldown(); }
+          break;
         case 'Backspace':
           if (_input.value === '') { e.preventDefault(); _closeDrilldown(); }
           break;
@@ -325,6 +328,14 @@ const NavigatorPanel = (() => {
     switch (e.key) {
       case 'ArrowDown': e.preventDefault(); _selectedIndex = Math.min(_selectedIndex + 1, _currentResults.length - 1); _updateSelection(); break;
       case 'ArrowUp': e.preventDefault(); _selectedIndex = Math.max(_selectedIndex - 1, 0); _updateSelection(); break;
+      case 'ArrowRight': {
+        const item = _currentResults[_selectedIndex];
+        if (item && item.type === 'SetupPage' && BROWSEABLE_CATEGORIES[item.name]) {
+          e.preventDefault();
+          _openDrilldown(item.name);
+        }
+        break;
+      }
       case 'Enter': e.preventDefault(); _selectResult(_selectedIndex); break;
       case 'Escape': e.preventDefault(); hide(); break;
     }

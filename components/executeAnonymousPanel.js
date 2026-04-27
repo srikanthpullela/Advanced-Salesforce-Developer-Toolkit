@@ -40,7 +40,7 @@ const ExecuteAnonymousPanel = (() => {
           <!-- Code editor -->
           <div class="sfdt-execanon-editor-wrap">
             <div class="sfdt-execanon-editor-header">
-              <span style="font-size:11px;color:#7f849c">Apex Code</span>
+              <span style="font-size:11px;color:#6e7681">Apex Code</span>
               <div style="display:flex;gap:4px">
                 <button class="sfdt-btn sfdt-btn-sm" id="ea-save" title="Save as Snippet">${I.save} Save</button>
                 <button class="sfdt-btn sfdt-btn-sm" id="ea-clear" title="Clear Code">${I.x} Clear</button>
@@ -56,16 +56,16 @@ const ExecuteAnonymousPanel = (() => {
           <!-- Results -->
           <div class="sfdt-execanon-results-wrap">
             <div class="sfdt-execanon-results-header">
-              <span style="font-size:11px;color:#7f849c">Results</span>
+              <span style="font-size:11px;color:#6e7681">Results</span>
               <div style="display:flex;gap:4px">
 
                 <button class="sfdt-btn sfdt-btn-sm" id="ea-tab-debugs" title="Open Debug Logs in Salesforce Setup">🔗 Debug Logs</button>
               </div>
             </div>
             <div class="sfdt-execanon-results-body" id="ea-results">
-              <div style="padding:24px;text-align:center;color:#7f849c;font-size:12px">
+              <div style="padding:24px;text-align:center;color:#6e7681;font-size:12px">
                 <div style="margin-bottom:8px">Write Apex code and click Execute or press <kbd>Ctrl+Enter</kbd></div>
-                <div style="font-size:11px;color:#585b70">Results, debug statements, and errors will appear here</div>
+                <div style="font-size:11px;color:#383e4a">Results, debug statements, and errors will appear here</div>
               </div>
             </div>
           </div>
@@ -73,7 +73,7 @@ const ExecuteAnonymousPanel = (() => {
         <!-- Snippets dropdown -->
         <div class="sfdt-dropdown-panel" id="ea-snippets-panel" style="display:none">
           <div class="sfdt-dropdown-header">
-            <span style="font-weight:600;font-size:12px;color:#89b4fa">Saved Snippets</span>
+            <span style="font-weight:600;font-size:12px;color:#58a6ff">Saved Snippets</span>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="ea-snippets-close">${I.x}</button>
           </div>
           <div class="sfdt-dropdown-body" id="ea-snippets-list"></div>
@@ -81,7 +81,7 @@ const ExecuteAnonymousPanel = (() => {
         <!-- History dropdown -->
         <div class="sfdt-dropdown-panel" id="ea-history-panel" style="display:none">
           <div class="sfdt-dropdown-header">
-            <span style="font-weight:600;font-size:12px;color:#89b4fa">Recent Executions</span>
+            <span style="font-weight:600;font-size:12px;color:#58a6ff">Recent Executions</span>
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" id="ea-history-close">${I.x}</button>
           </div>
           <div class="sfdt-dropdown-body" id="ea-history-list"></div>
@@ -305,7 +305,7 @@ const ExecuteAnonymousPanel = (() => {
             _lastOutput += `<div class="sfdt-exec-debugs">
               <div class="sfdt-section-title" style="margin-top:12px">Debug Output (${debugLines.length} statements)</div>
               ${debugLines.map(d => {
-                const c = d.level === 'ERROR' ? '#f38ba8' : d.level === 'WARN' ? '#f9e2af' : d.level === 'INFO' ? '#89b4fa' : '#cdd6f4';
+                const c = d.level === 'ERROR' ? '#f85149' : d.level === 'WARN' ? '#fbbf24' : d.level === 'INFO' ? '#58a6ff' : '#e1e4e8';
                 return `<div class="sfdt-exec-debug-line"><span class="sfdt-debug-level" style="color:${c}">${d.level}</span><span>${_esc(d.msg)}</span></div>`;
               }).join('')}
             </div>`;
@@ -352,7 +352,7 @@ const ExecuteAnonymousPanel = (() => {
 
   function _setResultTab(tab) {
     const resultsBody = _container.querySelector('#ea-results');
-    resultsBody.innerHTML = _lastOutput || '<div style="padding:16px;color:#7f849c;font-size:12px">No output yet.</div>';
+    resultsBody.innerHTML = _lastOutput || '<div style="padding:16px;color:#6e7681;font-size:12px">No output yet.</div>';
   }
 
   // ─── Snippets ─────────────────────────────────────────
@@ -380,7 +380,7 @@ const ExecuteAnonymousPanel = (() => {
     const snippets = _getSnippets();
 
     if (snippets.length === 0) {
-      list.innerHTML = '<div style="padding:16px;text-align:center;color:#7f849c;font-size:12px">No saved snippets yet.<br>Write code and click Save.</div>';
+      list.innerHTML = '<div style="padding:16px;text-align:center;color:#6e7681;font-size:12px">No saved snippets yet.<br>Write code and click Save.</div>';
       return;
     }
 
@@ -429,7 +429,7 @@ const ExecuteAnonymousPanel = (() => {
     try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { history = []; }
 
     if (history.length === 0) {
-      list.innerHTML = '<div style="padding:16px;text-align:center;color:#7f849c;font-size:12px">No execution history yet.</div>';
+      list.innerHTML = '<div style="padding:16px;text-align:center;color:#6e7681;font-size:12px">No execution history yet.</div>';
       return;
     }
 
@@ -438,7 +438,7 @@ const ExecuteAnonymousPanel = (() => {
       const timeStr = time.toLocaleTimeString() + ' ' + time.toLocaleDateString();
       return `<div class="sfdt-snippet-item" data-idx="${i}">
         <div class="sfdt-snippet-info" data-idx="${i}">
-          <span class="sfdt-snippet-name">${h.success ? '<span style="color:#a6e3a1">✓</span>' : '<span style="color:#f38ba8">✕</span>'} ${_esc(timeStr)}</span>
+          <span class="sfdt-snippet-name">${h.success ? '<span style="color:#22c55e">✓</span>' : '<span style="color:#f85149">✕</span>'} ${_esc(timeStr)}</span>
           <span class="sfdt-snippet-preview">${_esc(h.code.substring(0, 60).replace(/\n/g, ' '))}</span>
         </div>
       </div>`;

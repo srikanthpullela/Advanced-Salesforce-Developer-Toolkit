@@ -44,7 +44,7 @@ const DebugLogPanel = (() => {
           <!-- Left: Log list -->
           <div class="sfdt-debuglog-list" id="dl-list">
             <div class="sfdt-debuglog-list-header">
-              <span style="font-weight:600;color:#89b4fa;font-size:12px">Recent Logs</span>
+              <span style="font-weight:600;color:#58a6ff;font-size:12px">Recent Logs</span>
               <span class="sfdt-debuglog-count" id="dl-count">\u2014</span>
             </div>
             <div class="sfdt-debuglog-list-body" id="dl-list-body">
@@ -68,21 +68,22 @@ const DebugLogPanel = (() => {
                 </select>
               </div>
               <div class="sfdt-dl-tabs">
-                <button class="sfdt-dl-tab" id="dl-tab-raw" title="Raw log lines with search and filter">\uD83D\uDCC4 Raw</button>
-                <button class="sfdt-dl-tab" id="dl-tab-summary" title="Overview with stats, limits, and top issues">\uD83D\uDCCA Summary</button>
-                <button class="sfdt-dl-tab" id="dl-tab-timeline" title="Flame chart showing execution spans">\uD83D\uDD25 Flame Chart</button>
-                <button class="sfdt-dl-tab" id="dl-tab-calltree" title="Expandable call stack with self/total time">\uD83C\uDF33 Call Tree</button>
-                <button class="sfdt-dl-tab" id="dl-tab-analysis" title="Aggregated method metrics">\uD83E\uDDE0 Analysis</button>
-                <button class="sfdt-dl-tab" id="dl-tab-database" title="SOQL and DML insights">\uD83D\uDCBE Database</button>
+                <button class="sfdt-dl-tab" id="dl-tab-raw" title="Raw log lines with search and filter"><span class="sfdt-dl-tab-icon">${I.file}</span>Raw</button>
+                <button class="sfdt-dl-tab" id="dl-tab-limits" title="Governor-limit hotspots: which classes/methods consume the most SOQLs, DMLs, heap, CPU"><span class="sfdt-dl-tab-icon">${I.gauge}</span>Limits</button>
+                <button class="sfdt-dl-tab" id="dl-tab-summary" title="Overview with stats, limits, and top issues"><span class="sfdt-dl-tab-icon">${I.chart}</span>Summary</button>
+                <button class="sfdt-dl-tab" id="dl-tab-timeline" title="Flame chart showing execution spans"><span class="sfdt-dl-tab-icon">${I.flame}</span>Flame Chart</button>
+                <button class="sfdt-dl-tab" id="dl-tab-calltree" title="Expandable call stack with self/total time"><span class="sfdt-dl-tab-icon">${I.tree}</span>Call Tree</button>
+                <button class="sfdt-dl-tab" id="dl-tab-analysis" title="Aggregated method metrics"><span class="sfdt-dl-tab-icon">${I.cpu}</span>Analysis</button>
+                <button class="sfdt-dl-tab" id="dl-tab-database" title="SOQL and DML insights"><span class="sfdt-dl-tab-icon">${I.database}</span>Database</button>
                 <button class="sfdt-btn sfdt-btn-sm" id="dl-download" title="Download log">${I.download}</button>
               </div>
             </div>
             <div class="sfdt-debuglog-detail-body" id="dl-detail-body">
-              <div style="padding:40px;text-align:center;color:#7f849c">
+              <div style="padding:40px;text-align:center;color:#6e7681">
                 <div style="font-size:28px;margin-bottom:12px;opacity:0.4">${I.terminal}</div>
-                <div style="font-size:13px;font-weight:600;color:#cdd6f4;margin-bottom:6px">Debug Log Analyzer</div>
-                <div style="font-size:12px;color:#7f849c;line-height:1.6">Select a log from the list to analyze.<br>
-                Views: <b style="color:#cdd6f4">Raw</b> \u00B7 <b style="color:#89b4fa">Summary</b> \u00B7 <b style="color:#f38ba8">Flame Chart</b> \u00B7 <b style="color:#a6e3a1">Call Tree</b> \u00B7 <b style="color:#f9e2af">Analysis</b> \u00B7 <b style="color:#cba6f7">Database</b></div>
+                <div style="font-size:13px;font-weight:600;color:#e1e4e8;margin-bottom:6px">Debug Log Analyzer</div>
+                <div style="font-size:12px;color:#6e7681;line-height:1.6">Select a log from the list to analyze.<br>
+                Views: <b style="color:#e1e4e8">Raw</b> \u00B7 <b style="color:#f85149">Limits</b> \u00B7 <b style="color:#58a6ff">Summary</b> \u00B7 <b style="color:#f85149">Flame Chart</b> \u00B7 <b style="color:#22c55e">Call Tree</b> \u00B7 <b style="color:#fbbf24">Analysis</b> \u00B7 <b style="color:#c084fc">Database</b></div>
               </div>
             </div>
           </div>
@@ -109,6 +110,7 @@ const DebugLogPanel = (() => {
     _container.querySelector('#dl-search').addEventListener('input', function(e) { _searchTerm = e.target.value; _applyFilters(); });
     _container.querySelector('#dl-filter').addEventListener('change', function(e) { _logFilter = e.target.value; _applyFilters(); });
     _container.querySelector('#dl-tab-summary').addEventListener('click', function() { _showTab('summary'); });
+    _container.querySelector('#dl-tab-limits').addEventListener('click', function() { _showTab('limits'); });
     _container.querySelector('#dl-tab-calltree').addEventListener('click', function() { _showTab('calltree'); });
     _container.querySelector('#dl-tab-timeline').addEventListener('click', function() { _showTab('timeline'); });
     _container.querySelector('#dl-tab-analysis').addEventListener('click', function() { _showTab('analysis'); });
@@ -129,10 +131,10 @@ const DebugLogPanel = (() => {
       _container.querySelector('#dl-count').textContent = `${logs.length} logs`;
 
       if (logs.length === 0) {
-        listBody.innerHTML = '<div style="padding:16px;text-align:center;color:#7f849c;font-size:12px">'
+        listBody.innerHTML = '<div style="padding:16px;text-align:center;color:#6e7681;font-size:12px">'
           + 'No debug logs found (ApexLog records).<br>'
-          + '<span style="font-size:11px;color:#585b70;line-height:1.6">Trace flags exist but no Apex has been executed yet.<br>'
-          + 'Run some Apex code or trigger an action, then click <b style="color:#89b4fa">Refresh</b>.</span></div>';
+          + '<span style="font-size:11px;color:#383e4a;line-height:1.6">Trace flags exist but no Apex has been executed yet.<br>'
+          + 'Run some Apex code or trigger an action, then click <b style="color:#58a6ff">Refresh</b>.</span></div>';
         return;
       }
 
@@ -144,7 +146,7 @@ const DebugLogPanel = (() => {
         const userName = log.LogUser ? log.LogUser.Name : '';
         const status = log.Status || '';
         const isError = status.toLowerCase().includes('error') || status.toLowerCase().includes('fatal');
-        const durationColor = duration > 5000 ? '#f38ba8' : duration > 2000 ? '#f9e2af' : '#a6e3a1';
+        const durationColor = duration > 5000 ? '#f85149' : duration > 2000 ? '#fbbf24' : '#22c55e';
 
         return `<div class="sfdt-debuglog-item ${_currentLogId === log.Id ? 'active' : ''} ${isError ? 'error' : ''}" data-id="${log.Id}">
           <div class="sfdt-debuglog-item-header">
@@ -153,10 +155,10 @@ const DebugLogPanel = (() => {
           </div>
           <div class="sfdt-debuglog-item-op" title="${_esc(log.Operation || '')}">${_esc(op || 'Unknown')}</div>
           <div class="sfdt-debuglog-item-meta">
-            ${userName ? `<span style="color:#cba6f7">${_esc(userName)}</span>` : ''}
+            ${userName ? `<span style="color:#c084fc">${_esc(userName)}</span>` : ''}
             <span>${_esc(log.Request || '')}</span>
             <span>${size}</span>
-            ${isError ? '<span style="color:#f38ba8">ERROR</span>' : ''}
+            ${isError ? '<span style="color:#f85149">ERROR</span>' : ''}
           </div>
         </div>`;
       }).join('');
@@ -189,7 +191,7 @@ const DebugLogPanel = (() => {
     try {
       _rawLog = await API().getDebugLogBody(logId);
       _parsedLog = _parseLog(_rawLog);
-      _showTab('raw');
+      _showTab('limits');
     } catch (err) {
       detailBody.innerHTML = `<div class="sfdt-error" style="padding:16px">Error loading log: ${_esc(err.message)}</div>`;
     }
@@ -280,7 +282,8 @@ const DebugLogPanel = (() => {
               startLine: method.startLine,
               endLine: i + 1,
               duration: duration,
-              durationMs: Math.round(duration / 1000000)
+              durationMs: Math.round(duration / 1000000),
+              heapBytes: method.heapBytes || 0
             });
           }
         }
@@ -288,7 +291,8 @@ const DebugLogPanel = (() => {
         entry.type = 'soql';
         const soqlMatch = line.match(/\|SOQL_EXECUTE_BEGIN\|[^|]*\|(.*)/);
         const parentUnit = treeStack.length > 0 ? treeStack[treeStack.length - 1].name : '';
-        const q = { line: i + 1, query: soqlMatch ? soqlMatch[1].trim() : '', rows: 0, duration: 0, parentUnit };
+        const parentMethod = methodStack.length > 0 ? methodStack[methodStack.length - 1].name : parentUnit;
+        const q = { line: i + 1, query: soqlMatch ? soqlMatch[1].trim() : '', rows: 0, duration: 0, parentUnit, parentMethod };
         parsed.soqlQueries.push(q);
         if (treeStack.length > 0) treeStack[treeStack.length - 1].soql.push(q);
         parsed.soqlCount++;
@@ -304,12 +308,14 @@ const DebugLogPanel = (() => {
         entry.type = 'dml';
         const dmlMatch = line.match(/\|DML_BEGIN\|[^|]*\|Op:(\w+)\|Type:(\w+)\|Rows:(\d+)/);
         const parentUnit = treeStack.length > 0 ? treeStack[treeStack.length - 1].name : '';
+        const parentMethod = methodStack.length > 0 ? methodStack[methodStack.length - 1].name : parentUnit;
         const d = {
           line: i + 1,
           operation: dmlMatch ? dmlMatch[1] : '',
           type: dmlMatch ? dmlMatch[2] : '',
           rows: dmlMatch ? parseInt(dmlMatch[3], 10) : 0,
-          parentUnit
+          parentUnit,
+          parentMethod
         };
         parsed.dmlOps.push(d);
         if (treeStack.length > 0) treeStack[treeStack.length - 1].dml.push(d);
@@ -321,7 +327,14 @@ const DebugLogPanel = (() => {
         entry.type = 'limit';
       } else if (line.includes('|HEAP_ALLOCATE|')) {
         const heapMatch = line.match(/Bytes:(\d+)/);
-        if (heapMatch) parsed.heapSize = Math.max(parsed.heapSize, parseInt(heapMatch[1], 10));
+        if (heapMatch) {
+          const bytes = parseInt(heapMatch[1], 10);
+          parsed.heapSize = Math.max(parsed.heapSize, bytes);
+          if (methodStack.length > 0) {
+            const top = methodStack[methodStack.length - 1];
+            top.heapBytes = (top.heapBytes || 0) + bytes;
+          }
+        }
       } else if (line.includes('WARN')) {
         entry.type = 'warn';
       }
@@ -403,19 +416,453 @@ const DebugLogPanel = (() => {
 
   function _showTab(tab) {
     _currentTab = tab;
-    var tabs = ['summary', 'timeline', 'calltree', 'analysis', 'database', 'raw'];
+    var tabs = ['summary', 'limits', 'timeline', 'calltree', 'analysis', 'database', 'raw'];
     for (var t = 0; t < tabs.length; t++) {
       var b = _container.querySelector('#dl-tab-' + tabs[t]);
       if (b) b.classList.toggle('sfdt-dl-tab-active', tabs[t] === tab);
     }
     switch (tab) {
       case 'summary': _renderSummary(); break;
+      case 'limits': _renderLimits(); break;
       case 'calltree': _renderCallTree(); break;
       case 'timeline': _renderFlameChart(); break;
       case 'analysis': _renderAnalysis(); break;
       case 'database': _renderDatabase(); break;
       case 'raw': _renderRaw(); break;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  LIMITS TAB — Governor limit hotspots (per class/method)
+  // ═══════════════════════════════════════════════════════
+
+  var _limitsSort = { col: 'impact', dir: 'desc' };
+  var _limitsScope = 'method'; // 'method' or 'class'
+
+  function _limitClassOf(name) {
+    if (!name) return '(unknown)';
+    // Strip trailing method + parens
+    var n = name.replace(/\s*\(.*$/, '');
+    // Drop ":new", ":001bW...", etc. trailing on CODE_UNIT names
+    n = n.split('|')[0].trim();
+    var dot = n.indexOf('.');
+    if (dot > 0) return n.substring(0, dot);
+    // CODE_UNIT like "AccountTrigger on Account trigger event..."
+    var sp = n.indexOf(' ');
+    if (sp > 0) return n.substring(0, sp);
+    return n;
+  }
+
+  function _renderLimits() {
+    if (!_parsedLog) return;
+    var body = _container.querySelector('#dl-detail-body');
+    var p = _parsedLog;
+    var I = ICONS();
+
+    // ── Governor-limit usage bars (from log footer cumulative) ──
+    var limitDefs = [
+      { key: 'soqlQueries', label: 'SOQL Queries', icon: I.search, sfLimit: '100 sync / 200 async', color: '#c084fc' },
+      { key: 'queryRows', label: 'Query Rows Retrieved', icon: I.rows, sfLimit: '50,000', color: '#fbbf24' },
+      { key: 'dmlStatements', label: 'DML Statements', icon: I.save, sfLimit: '150', color: '#22c55e' },
+      { key: 'dmlRows', label: 'DML Rows Processed', icon: I.rows, sfLimit: '10,000', color: '#d29922' },
+      { key: 'cpuTime', label: 'CPU Time', icon: I.cpu, sfLimit: '10,000 ms sync / 60,000 ms async', color: '#58a6ff' },
+      { key: 'heapSize', label: 'Heap Size', icon: I.memory, sfLimit: '6 MB sync / 12 MB async', color: '#2dd4bf' },
+      { key: 'callouts', label: 'Callouts', icon: I.globe, sfLimit: '100', color: '#f472b6' },
+      { key: 'futureCalls', label: 'Future Calls', icon: I.clock, sfLimit: '50', color: '#8b949e' }
+    ];
+
+    var limitsBarHtml = '';
+    for (var lk = 0; lk < limitDefs.length; lk++) {
+      var def = limitDefs[lk];
+      var v = p.limits[def.key];
+      if (!v) continue;
+      var pct = Math.min(100, Math.round((v.used / v.max) * 100));
+      var color = pct >= 80 ? '#f85149' : pct >= 50 ? '#fbbf24' : '#22c55e';
+      var status = pct >= 80 ? 'CRITICAL' : pct >= 50 ? 'WARN' : 'OK';
+      var statusIcon = pct >= 80 ? I.alert : pct >= 50 ? I.alert : I.check;
+      var valDisplay = def.key === 'heapSize' ? (_formatBytes(v.used) + ' / ' + _formatBytes(v.max)) : (v.used.toLocaleString() + ' / ' + v.max.toLocaleString());
+      limitsBarHtml += '<div class="sfdt-limitrow-v2">'
+        + '<span class="sfdt-limitrow-icon" style="color:' + def.color + '">' + def.icon + '</span>'
+        + '<div class="sfdt-limitrow-info">'
+        +   '<div class="sfdt-limitrow-top">'
+        +     '<span class="sfdt-limitrow-label">' + def.label + '</span>'
+        +     '<span class="sfdt-limitrow-status sfdt-limitrow-status-' + status.toLowerCase() + '"><span class="sfdt-limitrow-statusicon">' + statusIcon + '</span>' + status + '</span>'
+        +   '</div>'
+        +   '<div class="sfdt-limitrow-barwrap">'
+        +     '<div class="sfdt-limitrow-bar"><div class="sfdt-limitrow-fill" style="width:' + pct + '%;background:' + color + '"></div></div>'
+        +     '<span class="sfdt-limitrow-pct" style="color:' + color + '">' + pct + '%</span>'
+        +   '</div>'
+        +   '<div class="sfdt-limitrow-meta">'
+        +     '<span class="sfdt-limitrow-val">' + valDisplay + '</span>'
+        +     '<span class="sfdt-limitrow-sflimit">Salesforce limit: ' + def.sfLimit + '</span>'
+        +   '</div>'
+        + '</div>'
+        + '</div>';
+    }
+
+    // ── Aggregate per method AND per class ──
+    var methodAgg = {};
+    var classAgg = {};
+
+    function _bump(map, key, name) {
+      if (!map[key]) map[key] = { name: name, calls: 0, totalMs: 0, heap: 0, soqls: 0, soqlRows: 0, dmls: 0, dmlRows: 0 };
+      return map[key];
+    }
+
+    for (var mi = 0; mi < p.methods.length; mi++) {
+      var m = p.methods[mi];
+      var mb = _bump(methodAgg, m.name, m.name);
+      mb.calls += 1;
+      mb.totalMs += m.durationMs;
+      mb.heap += (m.heapBytes || 0);
+
+      var cls = _limitClassOf(m.name);
+      var cb = _bump(classAgg, cls, cls);
+      cb.calls += 1;
+      cb.totalMs += m.durationMs;
+      cb.heap += (m.heapBytes || 0);
+    }
+
+    for (var qi = 0; qi < p.soqlQueries.length; qi++) {
+      var q = p.soqlQueries[qi];
+      var mkey = q.parentMethod || q.parentUnit || '(anonymous)';
+      var mb2 = _bump(methodAgg, mkey, mkey);
+      mb2.soqls += 1;
+      mb2.soqlRows += q.rows || 0;
+      var cls2 = _limitClassOf(mkey);
+      var cb2 = _bump(classAgg, cls2, cls2);
+      cb2.soqls += 1;
+      cb2.soqlRows += q.rows || 0;
+    }
+
+    for (var di = 0; di < p.dmlOps.length; di++) {
+      var d = p.dmlOps[di];
+      var dkey = d.parentMethod || d.parentUnit || '(anonymous)';
+      var mb3 = _bump(methodAgg, dkey, dkey);
+      mb3.dmls += 1;
+      mb3.dmlRows += d.rows || 0;
+      var cls3 = _limitClassOf(dkey);
+      var cb3 = _bump(classAgg, cls3, cls3);
+      cb3.dmls += 1;
+      cb3.dmlRows += d.rows || 0;
+    }
+
+    var source = _limitsScope === 'class' ? classAgg : methodAgg;
+    var rows = Object.values(source).filter(function(r) {
+      return r.soqls > 0 || r.dmls > 0 || r.heap > 0 || r.totalMs > 0;
+    });
+
+    var T = { soqls: p.soqlCount || 0, soqlRows: p.soqlRows || 0, dmls: p.dmlCount || 0, dmlRows: p.dmlRows || 0,
+              heap: p.heapSize || 0, cpu: p.cpuTime || 0 };
+
+    function _impact(r) {
+      var s = 0;
+      if (T.soqls) s += (r.soqls / T.soqls) * 100;
+      if (T.dmls) s += (r.dmls / T.dmls) * 100;
+      if (T.soqlRows) s += (r.soqlRows / T.soqlRows) * 50;
+      if (T.dmlRows) s += (r.dmlRows / T.dmlRows) * 50;
+      return s;
+    }
+    for (var ri = 0; ri < rows.length; ri++) rows[ri].impact = _impact(rows[ri]);
+
+    var col = _limitsSort.col, dir = _limitsSort.dir;
+    rows.sort(function(a, b) {
+      var va, vb;
+      if (col === 'name') { va = a.name.toLowerCase(); vb = b.name.toLowerCase(); return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va); }
+      va = a[col] || 0; vb = b[col] || 0;
+      return dir === 'asc' ? va - vb : vb - va;
+    });
+
+    // ── Smart insights: auto-detect anti-patterns ──
+    var insights = [];
+
+    // 1. Duplicate SOQL detection (same query repeated multiple times = N+1 / SOQL in loop)
+    var soqlByQueryMethod = {};
+    for (var sqi2 = 0; sqi2 < p.soqlQueries.length; sqi2++) {
+      var qq = p.soqlQueries[sqi2];
+      var qmk = (qq.parentMethod || qq.parentUnit || '') + '||' + (qq.query || '').trim();
+      if (!soqlByQueryMethod[qmk]) soqlByQueryMethod[qmk] = { count: 0, method: qq.parentMethod || qq.parentUnit, query: qq.query, firstLine: qq.line };
+      soqlByQueryMethod[qmk].count++;
+    }
+    var dupSoqls = Object.values(soqlByQueryMethod).filter(function(x) { return x.count >= 3; })
+      .sort(function(a, b) { return b.count - a.count; });
+    for (var dsi = 0; dsi < Math.min(dupSoqls.length, 3); dsi++) {
+      var ds = dupSoqls[dsi];
+      insights.push({
+        severity: ds.count >= 10 ? 'critical' : 'warn',
+        icon: I.alert,
+        title: 'Likely SOQL-in-loop / N+1 query',
+        detail: '<b>' + _esc(ds.method || '(unknown)') + '</b> executes the same SOQL <b>' + ds.count + '× </b>: <code>' + _esc((ds.query || '').substring(0, 100)) + '</code>',
+        fix: 'Move the query outside the loop and build a Map<Id, SObject> lookup, or add an IN (:ids) filter to fetch all rows in one query.'
+      });
+    }
+
+    // 2. Repeated DML (DML in loop)
+    var dmlByMethod = {};
+    for (var dmi2 = 0; dmi2 < p.dmlOps.length; dmi2++) {
+      var dd = p.dmlOps[dmi2];
+      var dkk = (dd.parentMethod || dd.parentUnit || '') + '||' + dd.operation + '||' + dd.type;
+      if (!dmlByMethod[dkk]) dmlByMethod[dkk] = { count: 0, method: dd.parentMethod || dd.parentUnit, op: dd.operation, type: dd.type };
+      dmlByMethod[dkk].count++;
+    }
+    var dupDml = Object.values(dmlByMethod).filter(function(x) { return x.count >= 3; })
+      .sort(function(a, b) { return b.count - a.count; });
+    for (var ddi = 0; ddi < Math.min(dupDml.length, 2); ddi++) {
+      var dm2 = dupDml[ddi];
+      insights.push({
+        severity: dm2.count >= 10 ? 'critical' : 'warn',
+        icon: I.alert,
+        title: 'Likely DML-in-loop',
+        detail: '<b>' + _esc(dm2.method || '(unknown)') + '</b> performs <b>' + dm2.count + '× ' + dm2.op + ' ' + dm2.type + '</b>',
+        fix: 'Collect records into a List<' + dm2.type + '> and perform a single DML operation outside the loop.'
+      });
+    }
+
+    // 3. Limits nearing threshold
+    var limitDefsForInsight = [
+      { k: 'soqlQueries', name: 'SOQL queries' },
+      { k: 'dmlStatements', name: 'DML statements' },
+      { k: 'queryRows', name: 'query rows' },
+      { k: 'dmlRows', name: 'DML rows' },
+      { k: 'cpuTime', name: 'CPU time' },
+      { k: 'heapSize', name: 'heap size' }
+    ];
+    for (var li2 = 0; li2 < limitDefsForInsight.length; li2++) {
+      var lim = p.limits[limitDefsForInsight[li2].k];
+      if (!lim) continue;
+      var lpct = (lim.used / lim.max) * 100;
+      if (lpct >= 80) {
+        insights.push({
+          severity: 'critical',
+          icon: I.alert,
+          title: 'Governor limit near ceiling',
+          detail: limitDefsForInsight[li2].name + ' usage is <b>' + Math.round(lpct) + '%</b> (' + lim.used.toLocaleString() + ' of ' + lim.max.toLocaleString() + ')',
+          fix: 'One more call like this and the transaction will throw LimitException. Optimise the top consumers listed below.'
+        });
+      }
+    }
+
+    // 4. Large query returning many rows from single call
+    var bigQuery = null;
+    for (var bqi = 0; bqi < p.soqlQueries.length; bqi++) {
+      if (!bigQuery || p.soqlQueries[bqi].rows > bigQuery.rows) bigQuery = p.soqlQueries[bqi];
+    }
+    if (bigQuery && bigQuery.rows >= 5000) {
+      insights.push({
+        severity: bigQuery.rows >= 20000 ? 'critical' : 'warn',
+        icon: I.alert,
+        title: 'Large query result set',
+        detail: 'A single SOQL in <b>' + _esc(bigQuery.parentMethod || bigQuery.parentUnit || '(unknown)') + '</b> returned <b>' + bigQuery.rows.toLocaleString() + ' rows</b>',
+        fix: 'Add a tighter WHERE clause, use LIMIT, or switch to a Database.QueryLocator in a Batch.'
+      });
+    }
+
+    // 5. Exceptions
+    if (p.exceptions.length > 0) {
+      insights.push({
+        severity: 'critical',
+        icon: I.alert,
+        title: p.exceptions.length + ' exception' + (p.exceptions.length > 1 ? 's' : '') + ' thrown',
+        detail: _esc((p.exceptions[0].message || '').substring(0, 160)),
+        fix: 'See the Raw tab (filter by Errors) for full stack trace.'
+      });
+    }
+
+    var insightsHtml = '';
+    if (insights.length > 0) {
+      insightsHtml = '<div class="sfdt-insights-list">';
+      for (var ii = 0; ii < insights.length; ii++) {
+        var ins = insights[ii];
+        insightsHtml += '<div class="sfdt-insight-item sfdt-insight-' + ins.severity + '">'
+          + '<span class="sfdt-insight-icon">' + ins.icon + '</span>'
+          + '<div class="sfdt-insight-body">'
+          +   '<div class="sfdt-insight-title">' + _esc(ins.title) + '</div>'
+          +   '<div class="sfdt-insight-detail">' + ins.detail + '</div>'
+          +   '<div class="sfdt-insight-fix"><b>Fix:</b> ' + _esc(ins.fix) + '</div>'
+          + '</div></div>';
+      }
+      insightsHtml += '</div>';
+    } else {
+      insightsHtml = '<div class="sfdt-insights-empty"><span class="sfdt-insight-icon" style="color:#22c55e">' + I.check + '</span>No anti-patterns detected — no SOQL-in-loop, no DML-in-loop, no near-limit warnings.</div>';
+    }
+
+    // ── Top consumers ──
+    function _topBy(field) {
+      var best = null;
+      for (var i = 0; i < rows.length; i++) { if (!best || (rows[i][field] || 0) > (best[field] || 0)) best = rows[i]; }
+      return best;
+    }
+    var topSoql = _topBy('soqls');
+    var topDml = _topBy('dmls');
+    var topRows = _topBy('soqlRows');
+    var topHeap = _topBy('heap');
+    var topCpu = _topBy('totalMs');
+
+    function _hotCard(icon, label, desc, value, unit, total, target, color) {
+      if (!target || !value) return '';
+      var pct = total ? Math.round((value / total) * 100) : 0;
+      var nm = target.name || '(unknown)';
+      var short = nm.length > 52 ? nm.substring(0, 49) + '...' : nm;
+      var valDisp = unit === 'bytes' ? _formatBytes(value) : (value.toLocaleString() + (unit ? ' ' + unit : ''));
+      var totalDisp = total ? (unit === 'bytes' ? _formatBytes(total) : total.toLocaleString() + (unit ? ' ' + unit : '')) : '';
+      return '<div class="sfdt-hotcard" style="border-left:3px solid ' + color + '">'
+        + '<div class="sfdt-hotcard-head">'
+        +   '<span class="sfdt-hotcard-icon" style="color:' + color + '">' + icon + '</span>'
+        +   '<div class="sfdt-hotcard-titles">'
+        +     '<div class="sfdt-hotcard-label">Top ' + label + ' consumer</div>'
+        +     '<div class="sfdt-hotcard-desc">' + desc + '</div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="sfdt-hotcard-name" title="' + _esc(nm) + '">' + _esc(short) + '</div>'
+        + '<div class="sfdt-hotcard-val">'
+        +   '<span class="sfdt-hotcard-num" style="color:' + color + '">' + valDisp + '</span>'
+        +   (total ? '<span class="sfdt-hotcard-of">of ' + totalDisp + '</span>'
+                   + '<span class="sfdt-hotcard-pct" style="color:' + color + '">' + pct + '%</span>' : '')
+        + '</div></div>';
+    }
+
+    var calloutsHtml = '<div class="sfdt-hotgrid">'
+      + _hotCard(I.search, 'SOQL', 'Most SELECT queries — bulkify into a single query', topSoql ? topSoql.soqls : 0, '', T.soqls, topSoql, '#c084fc')
+      + _hotCard(I.save, 'DML', 'Most insert/update/delete — collect and insert once', topDml ? topDml.dmls : 0, '', T.dmls, topDml, '#22c55e')
+      + _hotCard(I.rows, 'Query Rows', 'Most rows fetched — add WHERE / LIMIT', topRows ? topRows.soqlRows : 0, '', T.soqlRows, topRows, '#fbbf24')
+      + _hotCard(I.memory, 'Heap', 'Most bytes allocated — clear large collections', topHeap ? topHeap.heap : 0, 'bytes', T.heap, topHeap, '#2dd4bf')
+      + _hotCard(I.cpu, 'CPU Time', 'Most elapsed time — optimize loops and queries', topCpu ? topCpu.totalMs : 0, 'ms', T.cpu, topCpu, '#58a6ff')
+      + '</div>';
+
+    // ── Hotspot table ──
+    var arrow = function(c) { return col === c ? '<span class="sfdt-sort-arrow">' + (dir === 'asc' ? '\u25B2' : '\u25BC') + '</span>' : ''; };
+    var maxSoql = 0, maxDml = 0, maxRows = 0, maxDmlRows = 0, maxHeap = 0, maxMs = 0;
+    for (var xi = 0; xi < rows.length; xi++) {
+      var r0 = rows[xi];
+      if (r0.soqls > maxSoql) maxSoql = r0.soqls;
+      if (r0.dmls > maxDml) maxDml = r0.dmls;
+      if (r0.soqlRows > maxRows) maxRows = r0.soqlRows;
+      if (r0.dmlRows > maxDmlRows) maxDmlRows = r0.dmlRows;
+      if (r0.heap > maxHeap) maxHeap = r0.heap;
+      if (r0.totalMs > maxMs) maxMs = r0.totalMs;
+    }
+    var fireIcon = '<span class="sfdt-cell-fire" title="Top consumer in this column">' + I.flame + '</span>';
+    function _cellNum(v, mx, warnColor) {
+      if (!v) return '<td class="sfdt-an-num sfdt-cell-empty">\u2014</td>';
+      var isMax = v === mx && v > 0;
+      var style = isMax ? 'color:' + warnColor + ' !important;font-weight:700 !important' : '';
+      return '<td class="sfdt-an-num" style="' + style + '">' + (isMax ? fireIcon : '') + v.toLocaleString() + '</td>';
+    }
+
+    var tableHtml = '<table class="sfdt-analysis-table sfdt-limits-table">';
+    tableHtml += '<thead><tr>'
+      + '<th class="sfdt-an-sort" data-col="name">' + (_limitsScope === 'class' ? 'Class' : 'Class / Method') + arrow('name') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="impact" title="Weighted consumption score across all governor limits">Impact' + arrow('impact') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="calls" title="Number of times this method was invoked">Calls' + arrow('calls') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="soqls" title="SOQL queries (Salesforce limit: 100 sync / 200 async)">SOQLs' + arrow('soqls') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="soqlRows" title="Rows returned by SOQL (Salesforce limit: 50,000)">Query Rows' + arrow('soqlRows') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="dmls" title="DML statements (Salesforce limit: 150)">DMLs' + arrow('dmls') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="dmlRows" title="Rows affected by DML (Salesforce limit: 10,000)">DML Rows' + arrow('dmlRows') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="heap" title="Heap allocated (Salesforce limit: 6 MB sync / 12 MB async)">Heap' + arrow('heap') + '</th>'
+      + '<th class="sfdt-an-sort sfdt-an-num" data-col="totalMs" title="Elapsed time in method (contributes to CPU limit)">Total ms' + arrow('totalMs') + '</th>'
+      + '</tr></thead><tbody>';
+
+    if (rows.length === 0) {
+      tableHtml += '<tr><td colspan="9" style="padding:24px !important;text-align:center !important;color:#6e7681 !important">No methods with governor-limit activity found.</td></tr>';
+    }
+    for (var ti = 0; ti < Math.min(rows.length, 300); ti++) {
+      var r = rows[ti];
+      var impactColor = r.impact > 60 ? '#f85149' : r.impact > 25 ? '#fbbf24' : '#8b949e';
+      var nameDisplay = r.name.length > 70 ? r.name.substring(0, 67) + '...' : r.name;
+      tableHtml += '<tr>'
+        + '<td class="sfdt-an-name" title="' + _esc(r.name) + '">' + _esc(nameDisplay) + '</td>'
+        + '<td class="sfdt-an-num" style="color:' + impactColor + ' !important;font-weight:600 !important">' + Math.round(r.impact) + '</td>'
+        + '<td class="sfdt-an-num">' + (r.calls || 0).toLocaleString() + '</td>'
+        + _cellNum(r.soqls, maxSoql, '#c084fc')
+        + _cellNum(r.soqlRows, maxRows, '#fbbf24')
+        + _cellNum(r.dmls, maxDml, '#22c55e')
+        + _cellNum(r.dmlRows, maxDmlRows, '#d29922')
+        + (r.heap ? '<td class="sfdt-an-num" style="color:' + (r.heap === maxHeap ? '#2dd4bf !important;font-weight:700 !important' : '#e1e4e8') + '">' + (r.heap === maxHeap ? fireIcon : '') + _formatBytes(r.heap) + '</td>' : '<td class="sfdt-an-num sfdt-cell-empty">\u2014</td>')
+        + _cellNum(r.totalMs, maxMs, '#58a6ff')
+        + '</tr>';
+    }
+    tableHtml += '</tbody></table>';
+
+    // ── Legend for backend devs ──
+    var legendHtml = '<div class="sfdt-limit-legend">'
+      + '<div class="sfdt-legend-title"><span class="sfdt-legend-icon">' + I.info + '</span>How to read this</div>'
+      + '<div class="sfdt-legend-grid">'
+      +   '<div class="sfdt-legend-item"><b style="color:#f85149">Impact</b> — weighted score combining SOQLs, DMLs and rows, ranked against other methods in this transaction.</div>'
+      +   '<div class="sfdt-legend-item"><b style="color:#c084fc">SOQLs</b> — count of SELECT queries executed <i>inside</i> this method. <b>Non-bulkified pattern</b>: same query repeated N times in a loop.</div>'
+      +   '<div class="sfdt-legend-item"><b style="color:#fbbf24">Query Rows</b> — rows returned by those SOQLs. A single query returning 10k rows spends the same budget as 200 queries × 50 rows.</div>'
+      +   '<div class="sfdt-legend-item"><b style="color:#22c55e">DMLs</b> — count of insert / update / delete / upsert statements. Collect records into a list and DML once.</div>'
+      +   '<div class="sfdt-legend-item"><b style="color:#2dd4bf">Heap</b> — bytes of memory allocated by <code>HEAP_ALLOCATE</code> events inside the method (strings, collections, large SObject graphs).</div>'
+      +   '<div class="sfdt-legend-item"><span class="sfdt-cell-fire">' + I.flame + '</span> marks the #1 consumer in that column for this transaction.</div>'
+      + '</div></div>';
+
+    // ── Compose ──
+    var h = '<div class="sfdt-limits-scroll">';
+    h += '<div class="sfdt-limits-intro">'
+      + '<span class="sfdt-limits-intro-icon">' + I.gauge + '</span>'
+      + '<div><div class="sfdt-limits-intro-title">Governor Limit Hotspots</div>'
+      + '<div class="sfdt-limits-intro-sub">Which classes &amp; methods consumed the most SOQLs, DMLs, query rows, heap and CPU in this transaction. Sorted by weighted <b>Impact</b>.</div>'
+      + '</div></div>';
+
+    if (limitsBarHtml) {
+      h += '<div class="sfdt-limits-section">'
+        + '<div class="sfdt-limits-section-head"><span class="sfdt-limits-section-icon">' + I.chart + '</span>Transaction Totals vs Salesforce Limits</div>'
+        + '<div class="sfdt-limitrows-v2">' + limitsBarHtml + '</div>'
+        + '</div>';
+    }
+
+    h += '<div class="sfdt-limits-section">'
+      + '<div class="sfdt-limits-section-head"><span class="sfdt-limits-section-icon">' + I.alert + '</span>Smart Insights &amp; Recommendations <span class="sfdt-limits-count">(' + insights.length + ')</span></div>'
+      + insightsHtml
+      + '</div>';
+
+    h += '<div class="sfdt-limits-section">'
+      + '<div class="sfdt-limits-section-head"><span class="sfdt-limits-section-icon">' + I.trendingUp + '</span>Top Consumers</div>'
+      + calloutsHtml
+      + '</div>';
+
+    h += '<div class="sfdt-limits-section">'
+      + '<div class="sfdt-limits-section-head-row">'
+      +   '<div class="sfdt-limits-section-head" style="margin:0 !important"><span class="sfdt-limits-section-icon">' + I.list + '</span>Hotspot Breakdown <span class="sfdt-limits-count">(' + rows.length + ')</span></div>'
+      +   '<div class="sfdt-limits-controls">'
+      +     '<div class="sfdt-scope-toggle">'
+      +       '<button class="sfdt-scope-btn' + (_limitsScope === 'method' ? ' active' : '') + '" id="dl-scope-method">Per Method</button>'
+      +       '<button class="sfdt-scope-btn' + (_limitsScope === 'class' ? ' active' : '') + '" id="dl-scope-class">Per Class</button>'
+      +     '</div>'
+      +     '<button class="sfdt-btn sfdt-btn-sm" id="dl-limits-csv" title="Copy as CSV"><span class="sfdt-dl-tab-icon">' + I.copy + '</span>CSV</button>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="sfdt-limits-tablewrap">' + tableHtml + '</div>'
+      + '</div>';
+
+    h += legendHtml;
+    h += '</div>';
+    body.innerHTML = h;
+
+    body.querySelectorAll('.sfdt-an-sort').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var c = th.dataset.col;
+        if (_limitsSort.col === c) _limitsSort.dir = _limitsSort.dir === 'asc' ? 'desc' : 'asc';
+        else { _limitsSort.col = c; _limitsSort.dir = 'desc'; }
+        _renderLimits();
+      });
+    });
+
+    var btnM = body.querySelector('#dl-scope-method');
+    var btnC = body.querySelector('#dl-scope-class');
+    if (btnM) btnM.addEventListener('click', function() { _limitsScope = 'method'; _renderLimits(); });
+    if (btnC) btnC.addEventListener('click', function() { _limitsScope = 'class'; _renderLimits(); });
+
+    var csvBtn = body.querySelector('#dl-limits-csv');
+    if (csvBtn) csvBtn.addEventListener('click', function() {
+      var csv = 'Name,Impact,Calls,SOQLs,Query Rows,DMLs,DML Rows,Heap (bytes),Total ms\n';
+      for (var yi = 0; yi < rows.length; yi++) {
+        var rr = rows[yi];
+        csv += '"' + (rr.name || '').replace(/"/g, '""') + '",' + Math.round(rr.impact) + ',' + rr.calls + ',' + rr.soqls + ',' + rr.soqlRows + ',' + rr.dmls + ',' + rr.dmlRows + ',' + rr.heap + ',' + rr.totalMs + '\n';
+      }
+      _copy(csv);
+      csvBtn.innerHTML = '<span class="sfdt-dl-tab-icon">' + I.check + '</span>Copied';
+      setTimeout(function() { csvBtn.innerHTML = '<span class="sfdt-dl-tab-icon">' + I.copy + '</span>CSV'; }, 1500);
+    });
   }
 
   // ═══════════════════════════════════════════════════════
@@ -430,7 +877,7 @@ const DebugLogPanel = (() => {
     var limitsHtml = Object.entries(p.limits).map(function(kv) {
       var key = kv[0], val = kv[1];
       var pct = Math.round((val.used / val.max) * 100);
-      var color = pct > 80 ? '#f38ba8' : pct > 50 ? '#f9e2af' : '#a6e3a1';
+      var color = pct > 80 ? '#f85149' : pct > 50 ? '#fbbf24' : '#22c55e';
       var label = key.replace(/([A-Z])/g, ' $1').replace(/^./, function(s) { return s.toUpperCase(); });
       return '<div class="sfdt-limit-row">'
         + '<span class="sfdt-limit-label">' + label + '</span>'
@@ -444,7 +891,7 @@ const DebugLogPanel = (() => {
     var methodsHtml = p.methods.slice(0, 10).map(function(m, i) {
       var maxDur = (p.methods[0] && p.methods[0].durationMs) || 1;
       var pct = Math.round((m.durationMs / maxDur) * 100);
-      var color = m.durationMs > 1000 ? '#f38ba8' : m.durationMs > 200 ? '#f9e2af' : '#a6e3a1';
+      var color = m.durationMs > 1000 ? '#f85149' : m.durationMs > 200 ? '#fbbf24' : '#22c55e';
       return '<div class="sfdt-method-row">'
         + '<span class="sfdt-method-rank">#' + (i + 1) + '</span>'
         + '<div class="sfdt-method-info">'
@@ -458,14 +905,14 @@ const DebugLogPanel = (() => {
 
     var exceptionsHtml = p.exceptions.length > 0
       ? '<div class="sfdt-summary-section">'
-        + '<div class="sfdt-section-title" style="color:#f38ba8">\u26A0 Exceptions (' + p.exceptions.length + ')</div>'
+        + '<div class="sfdt-section-title" style="color:#f85149">\u26A0 Exceptions (' + p.exceptions.length + ')</div>'
         + p.exceptions.map(function(ex) {
-            return '<div class="sfdt-exception-row"><span class="sfdt-method-line">L' + ex.line + '</span> <span style="color:#f38ba8">' + _esc(ex.message.substring(0, 150)) + '</span></div>';
+            return '<div class="sfdt-exception-row"><span class="sfdt-method-line">L' + ex.line + '</span> <span style="color:#f85149">' + _esc(ex.message.substring(0, 150)) + '</span></div>';
           }).join('')
         + '</div>' : '';
 
     var debugPreview = p.userDebugs.slice(0, 10).map(function(d) {
-      var levelColor = d.level === 'ERROR' ? '#f38ba8' : d.level === 'WARN' ? '#f9e2af' : d.level === 'INFO' ? '#89b4fa' : '#a6adc8';
+      var levelColor = d.level === 'ERROR' ? '#f85149' : d.level === 'WARN' ? '#fbbf24' : d.level === 'INFO' ? '#58a6ff' : '#8b949e';
       return '<div class="sfdt-debug-row">'
         + '<span class="sfdt-debug-level" style="color:' + levelColor + '">' + d.level + '</span>'
         + '<span class="sfdt-debug-msg">' + _esc(d.message.length > 100 ? d.message.substring(0, 97) + '...' : d.message) + '</span>'
@@ -474,19 +921,19 @@ const DebugLogPanel = (() => {
 
     body.innerHTML = '<div class="sfdt-summary-scroll">'
       + '<div class="sfdt-stats-grid">'
-      + _statCard(p.cpuTime || '\u2014', 'ms', 'CPU Time', '#89b4fa')
-      + _statCard(p.soqlCount, '', 'SOQL Queries', '#cba6f7')
-      + _statCard(p.soqlRows, '', 'Query Rows', '#f9e2af')
-      + _statCard(p.dmlCount, '', 'DML Ops', '#a6e3a1')
-      + _statCard(p.dmlRows, '', 'DML Rows', '#fab387')
-      + _statCard(_formatBytes(p.heapSize), '', 'Heap', '#94e2d5')
-      + _statCard(p.methods.length, '', 'Methods', '#7f849c')
-      + _statCard(p.exceptions.length, '', 'Errors', p.exceptions.length > 0 ? '#f38ba8' : '#7f849c')
+      + _statCard(p.cpuTime || '\u2014', 'ms', 'CPU Time', '#58a6ff')
+      + _statCard(p.soqlCount, '', 'SOQL Queries', '#c084fc')
+      + _statCard(p.soqlRows, '', 'Query Rows', '#fbbf24')
+      + _statCard(p.dmlCount, '', 'DML Ops', '#22c55e')
+      + _statCard(p.dmlRows, '', 'DML Rows', '#d29922')
+      + _statCard(_formatBytes(p.heapSize), '', 'Heap', '#2dd4bf')
+      + _statCard(p.methods.length, '', 'Methods', '#6e7681')
+      + _statCard(p.exceptions.length, '', 'Errors', p.exceptions.length > 0 ? '#f85149' : '#6e7681')
       + '</div>'
       + exceptionsHtml
       + (Object.keys(p.limits).length > 0 ? '<div class="sfdt-summary-section"><div class="sfdt-section-title">\uD83D\uDCCF Governor Limits</div>' + limitsHtml + '</div>' : '')
       + (p.methods.length > 0 ? '<div class="sfdt-summary-section"><div class="sfdt-section-title">\u23F1 Slowest Methods (Top 10)</div>' + methodsHtml + '</div>' : '')
-      + (p.userDebugs.length > 0 ? '<div class="sfdt-summary-section"><div class="sfdt-section-title">\uD83D\uDCDD Debug Statements (' + p.userDebugs.length + ')</div>' + debugPreview + (p.userDebugs.length > 10 ? '<div style="padding:6px 0;color:#585b70;font-size:10px">+' + (p.userDebugs.length - 10) + ' more \u2014 see Raw tab for all</div>' : '') + '</div>' : '')
+      + (p.userDebugs.length > 0 ? '<div class="sfdt-summary-section"><div class="sfdt-section-title">\uD83D\uDCDD Debug Statements (' + p.userDebugs.length + ')</div>' + debugPreview + (p.userDebugs.length > 10 ? '<div style="padding:6px 0;color:#383e4a;font-size:10px">+' + (p.userDebugs.length - 10) + ' more \u2014 see Raw tab for all</div>' : '') + '</div>' : '')
       + '</div>';
   }
 
@@ -538,7 +985,7 @@ const DebugLogPanel = (() => {
     _collectSpans(p.callTree, 0);
 
     if (spans.length === 0) {
-      body.innerHTML = '<div style="padding:24px;text-align:center;color:#7f849c">No execution spans found. Set log level to FINEST for detailed flame chart.</div>';
+      body.innerHTML = '<div style="padding:24px;text-align:center;color:#6e7681">No execution spans found. Set log level to FINEST for detailed flame chart.</div>';
       return;
     }
 
@@ -587,7 +1034,7 @@ const DebugLogPanel = (() => {
 
     // Legend
     h += '<div class="sfdt-flame-legend">';
-    var legends = [['Method', '#a6e3a1'], ['Trigger', '#89b4fa'], ['Flow', '#cba6f7'], ['SOQL', '#f9e2af'], ['DML', '#fab387'], ['Other', '#7f849c']];
+    var legends = [['Method', '#22c55e'], ['Trigger', '#58a6ff'], ['Flow', '#c084fc'], ['SOQL', '#fbbf24'], ['DML', '#d29922'], ['Other', '#6e7681']];
     for (var li = 0; li < legends.length; li++) {
       h += '<span class="sfdt-flame-legend-item"><span class="sfdt-flame-legend-dot" style="background:' + legends[li][1] + '"></span>' + legends[li][0] + '</span>';
     }
@@ -608,12 +1055,12 @@ const DebugLogPanel = (() => {
 
   function _typeColor(type) {
     switch (type) {
-      case 'method': return '#a6e3a1';
-      case 'trigger': return '#89b4fa';
-      case 'flow': return '#cba6f7';
-      case 'soql': return '#f9e2af';
-      case 'dml': return '#fab387';
-      default: return '#7f849c';
+      case 'method': return '#22c55e';
+      case 'trigger': return '#58a6ff';
+      case 'flow': return '#c084fc';
+      case 'soql': return '#fbbf24';
+      case 'dml': return '#d29922';
+      default: return '#6e7681';
     }
   }
 
@@ -642,7 +1089,7 @@ const DebugLogPanel = (() => {
     var tree = _parsedLog.callTree;
 
     if (tree.length === 0) {
-      body.innerHTML = '<div style="padding:24px;text-align:center;color:#7f849c">No code unit entries found in this log.<br><span style="font-size:11px;">Set log level to FINEST for triggers and classes.</span></div>';
+      body.innerHTML = '<div style="padding:24px;text-align:center;color:#6e7681">No code unit entries found in this log.<br><span style="font-size:11px;">Set log level to FINEST for triggers and classes.</span></div>';
       return;
     }
 
@@ -686,8 +1133,8 @@ const DebugLogPanel = (() => {
 
   function _renderTreeNode(node, depth) {
     var hasChildren = node.children.length > 0;
-    var durColor = node.durationMs > 1000 ? '#f38ba8' : node.durationMs > 200 ? '#f9e2af' : '#a6e3a1';
-    var selfColor = (node.selfTimeMs || 0) > 500 ? '#f38ba8' : (node.selfTimeMs || 0) > 100 ? '#f9e2af' : '#a6e3a1';
+    var durColor = node.durationMs > 1000 ? '#f85149' : node.durationMs > 200 ? '#fbbf24' : '#22c55e';
+    var selfColor = (node.selfTimeMs || 0) > 500 ? '#f85149' : (node.selfTimeMs || 0) > 100 ? '#fbbf24' : '#22c55e';
     var hasExceptions = node.exceptions.length > 0;
     var indent = depth * 16;
     var totalRows = 0;
@@ -705,7 +1152,7 @@ const DebugLogPanel = (() => {
     h += '<span class="sfdt-ct-col-self" style="color:' + selfColor + '">' + ((node.selfTimeMs || 0) > 0 ? node.selfTimeMs + 'ms' : '') + '</span>';
     h += '<span class="sfdt-ct-col-badge">' + (node.soql.length > 0 ? '<span class="sfdt-tree-badge sfdt-tree-badge-soql">' + node.soql.length + '</span>' : '') + '</span>';
     h += '<span class="sfdt-ct-col-badge">' + (node.dml.length > 0 ? '<span class="sfdt-tree-badge sfdt-tree-badge-dml">' + node.dml.length + '</span>' : '') + '</span>';
-    h += '<span class="sfdt-ct-col-badge">' + (totalRows > 0 ? '<span style="color:#a6adc8;font-size:10px">' + totalRows + '</span>' : '') + '</span>';
+    h += '<span class="sfdt-ct-col-badge">' + (totalRows > 0 ? '<span style="color:#8b949e;font-size:10px">' + totalRows + '</span>' : '') + '</span>';
     h += '<span class="sfdt-ct-col-line">L' + node.startLine + '</span>';
     h += '</div>';
 
@@ -723,17 +1170,17 @@ const DebugLogPanel = (() => {
       for (var qi = 0; qi < node.soql.length; qi++) {
         var q = node.soql[qi];
         h += '<div class="sfdt-tree-op-row sfdt-clickable-line" data-logline="' + q.line + '">'
-          + '<span class="sfdt-tree-op-icon" style="color:#cba6f7">Q</span>'
+          + '<span class="sfdt-tree-op-icon" style="color:#c084fc">Q</span>'
           + '<span class="sfdt-tree-op-text">' + _esc(q.query.length > 55 ? q.query.substring(0, 52) + '...' : q.query) + '</span>'
-          + '<span style="color:#a6adc8;font-size:10px">' + q.rows + ' rows</span></div>';
+          + '<span style="color:#8b949e;font-size:10px">' + q.rows + ' rows</span></div>';
       }
       for (var dli = 0; dli < node.dml.length; dli++) {
         var d = node.dml[dli];
-        var opColor = d.operation === 'Delete' ? '#f38ba8' : d.operation === 'Update' ? '#f9e2af' : '#a6e3a1';
+        var opColor = d.operation === 'Delete' ? '#f85149' : d.operation === 'Update' ? '#fbbf24' : '#22c55e';
         h += '<div class="sfdt-tree-op-row sfdt-clickable-line" data-logline="' + d.line + '">'
           + '<span class="sfdt-tree-op-icon" style="color:' + opColor + '">D</span>'
           + '<span class="sfdt-tree-op-text">' + _esc(d.operation) + ' ' + _esc(d.type) + '</span>'
-          + '<span style="color:#a6adc8;font-size:10px">' + d.rows + ' rows</span></div>';
+          + '<span style="color:#8b949e;font-size:10px">' + d.rows + ' rows</span></div>';
       }
       h += '</div>';
     }
@@ -796,7 +1243,7 @@ const DebugLogPanel = (() => {
     });
 
     if (rows.length === 0) {
-      body.innerHTML = '<div style="padding:24px;text-align:center;color:#7f849c">No method calls found in this log.</div>';
+      body.innerHTML = '<div style="padding:24px;text-align:center;color:#6e7681">No method calls found in this log.</div>';
       return;
     }
 
@@ -818,8 +1265,8 @@ const DebugLogPanel = (() => {
 
     for (var ri = 0; ri < Math.min(rows.length, 200); ri++) {
       var r = rows[ri];
-      var selfColor = r.selfMs > 500 ? '#f38ba8' : r.selfMs > 100 ? '#f9e2af' : '#a6e3a1';
-      var totalColor = r.totalMs > 1000 ? '#f38ba8' : r.totalMs > 200 ? '#f9e2af' : '#a6e3a1';
+      var selfColor = r.selfMs > 500 ? '#f85149' : r.selfMs > 100 ? '#fbbf24' : '#22c55e';
+      var totalColor = r.totalMs > 1000 ? '#f85149' : r.totalMs > 200 ? '#fbbf24' : '#22c55e';
       h += '<tr>'
         + '<td class="sfdt-an-name" title="' + _esc(r.name) + '">' + _esc(r.name.length > 55 ? r.name.substring(0, 52) + '...' : r.name) + '</td>'
         + '<td><span class="sfdt-an-type sfdt-an-type-' + r.type + '">' + r.type + '</span></td>'
@@ -910,7 +1357,7 @@ const DebugLogPanel = (() => {
         h += '<tr class="sfdt-db-row-clickable" data-logline="' + firstCall.line + '">'
           + '<td class="sfdt-db-query-cell" title="' + _esc(sg.query) + '"><code>' + _esc(sg.query.length > 70 ? sg.query.substring(0, 67) + '...' : sg.query) + '</code></td>'
           + '<td class="sfdt-an-num">' + sg.count + '</td>'
-          + '<td class="sfdt-an-num" style="color:#f9e2af">' + sg.totalRows + '</td>'
+          + '<td class="sfdt-an-num" style="color:#fbbf24">' + sg.totalRows + '</td>'
           + '<td class="sfdt-parent-unit" title="' + _esc(firstCall.parentUnit) + '">' + _esc(firstCall.parentUnit ? (firstCall.parentUnit.length > 25 ? firstCall.parentUnit.substring(0, 22) + '...' : firstCall.parentUnit) : '') + '</td>'
           + '<td class="sfdt-an-num">L' + firstCall.line + '</td>'
           + '</tr>';
@@ -919,7 +1366,7 @@ const DebugLogPanel = (() => {
           for (var sci = 0; sci < Math.min(sg.calls.length, 5); sci++) {
             var sc = sg.calls[sci];
             h += '<tr class="sfdt-db-sub-row sfdt-db-row-clickable" data-logline="' + sc.line + '">'
-              + '<td style="padding-left:28px;color:#585b70;font-size:10px">\u2514 call ' + (sci + 1) + '</td>'
+              + '<td style="padding-left:28px;color:#383e4a;font-size:10px">\u2514 call ' + (sci + 1) + '</td>'
               + '<td></td>'
               + '<td class="sfdt-an-num" style="font-size:10px">' + sc.rows + '</td>'
               + '<td class="sfdt-parent-unit" style="font-size:9px">' + _esc(sc.parentUnit ? (sc.parentUnit.length > 20 ? sc.parentUnit.substring(0, 17) + '...' : sc.parentUnit) : '') + '</td>'
@@ -927,13 +1374,13 @@ const DebugLogPanel = (() => {
               + '</tr>';
           }
           if (sg.calls.length > 5) {
-            h += '<tr class="sfdt-db-sub-row"><td style="padding-left:28px;color:#585b70;font-size:10px" colspan="5">+' + (sg.calls.length - 5) + ' more calls</td></tr>';
+            h += '<tr class="sfdt-db-sub-row"><td style="padding-left:28px;color:#383e4a;font-size:10px" colspan="5">+' + (sg.calls.length - 5) + ' more calls</td></tr>';
           }
         }
       }
       h += '</tbody></table>';
     } else {
-      h += '<div style="padding:12px;color:#7f849c;font-size:12px">No SOQL queries in this log.</div>';
+      h += '<div style="padding:12px;color:#6e7681;font-size:12px">No SOQL queries in this log.</div>';
     }
 
     // DML Section
@@ -948,19 +1395,19 @@ const DebugLogPanel = (() => {
       for (var dgi = 0; dgi < dmlList.length; dgi++) {
         var dg = dmlList[dgi];
         var fc = dg.calls[0];
-        var opColor = dg.operation === 'Delete' ? '#f38ba8' : dg.operation === 'Update' ? '#f9e2af' : '#a6e3a1';
+        var opColor = dg.operation === 'Delete' ? '#f85149' : dg.operation === 'Update' ? '#fbbf24' : '#22c55e';
         h += '<tr class="sfdt-db-row-clickable" data-logline="' + fc.line + '">'
           + '<td style="color:' + opColor + ';font-weight:600">' + _esc(dg.operation) + '</td>'
           + '<td>' + _esc(dg.type) + '</td>'
           + '<td class="sfdt-an-num">' + dg.count + '</td>'
-          + '<td class="sfdt-an-num" style="color:#fab387">' + dg.totalRows + '</td>'
+          + '<td class="sfdt-an-num" style="color:#d29922">' + dg.totalRows + '</td>'
           + '<td class="sfdt-parent-unit" title="' + _esc(fc.parentUnit) + '">' + _esc(fc.parentUnit ? (fc.parentUnit.length > 25 ? fc.parentUnit.substring(0, 22) + '...' : fc.parentUnit) : '') + '</td>'
           + '<td class="sfdt-an-num">L' + fc.line + '</td>'
           + '</tr>';
       }
       h += '</tbody></table>';
     } else {
-      h += '<div style="padding:12px;color:#7f849c;font-size:12px">No DML operations in this log.</div>';
+      h += '<div style="padding:12px;color:#6e7681;font-size:12px">No DML operations in this log.</div>';
     }
 
     h += '</div>';
@@ -1035,7 +1482,7 @@ const DebugLogPanel = (() => {
       }
       h += '<div class="sfdt-log-line ' + typeClass + '"><span class="sfdt-log-num">' + l.num + '</span><span class="sfdt-log-text">' + text + '</span></div>';
     }
-    if (lines.length > 2000) h += '<div style="padding:8px 16px;color:#7f849c">...' + (lines.length - 2000) + ' more lines</div>';
+    if (lines.length > 2000) h += '<div style="padding:8px 16px;color:#6e7681">...' + (lines.length - 2000) + ' more lines</div>';
     h += '</div>';
     body.innerHTML = h;
   }
@@ -1048,7 +1495,7 @@ const DebugLogPanel = (() => {
     var lineEl = rawContainer.querySelector('.sfdt-log-line:nth-child(' + Math.min(lineNum, 2000) + ')');
     if (lineEl) {
       lineEl.scrollIntoView({ block: 'center' });
-      lineEl.style.background = 'rgba(137,180,250,0.2)';
+      lineEl.style.background = 'rgba(88,166,255,0.2)';
       setTimeout(function() { lineEl.style.background = ''; }, 2000);
     }
   }

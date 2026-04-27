@@ -16,7 +16,7 @@ const DataBuilderPanel = (() => {
       defaults: { Name: '', IsActive: 'true', [`${NS}ConfigurationType__c`]: 'Bundle' },
       allowedChildren: ['option_group', 'option', 'attribute', 'pricebook_entry'],
       description: 'Product bundle - top-level configurable product',
-      color: '#89b4fa'
+      color: '#58a6ff'
     },
     option_group: {
       label: 'Option Group', icon: '\uD83D\uDCC2', object: `${NS}ProductOptionGroup__c`,
@@ -24,7 +24,7 @@ const DataBuilderPanel = (() => {
       parentField: `${NS}ProductId__c`,
       allowedChildren: ['option'],
       description: 'Groups options under a bundle',
-      color: '#cba6f7',
+      color: '#c084fc',
       canUseExisting: true
     },
     option: {
@@ -37,7 +37,7 @@ const DataBuilderPanel = (() => {
       linkGroupField: `${NS}ProductOptionGroupId__c`,
       allowedChildren: ['option', 'attribute', 'pricebook_entry'],
       description: 'Option product linked to parent',
-      color: '#a6e3a1'
+      color: '#22c55e'
     },
     attribute: {
       label: 'Attribute', icon: '\uD83C\uDFF7\uFE0F', object: `${NS}ProductAttributeValue__c`,
@@ -45,7 +45,7 @@ const DataBuilderPanel = (() => {
       parentField: `${NS}ProductId__c`,
       allowedChildren: [],
       description: 'Attribute value on a product',
-      color: '#f9e2af'
+      color: '#fbbf24'
     },
     pricebook_entry: {
       label: 'Price', icon: '\uD83D\uDCB2', object: 'PricebookEntry',
@@ -53,14 +53,14 @@ const DataBuilderPanel = (() => {
       parentField: 'Product2Id',
       allowedChildren: [],
       description: 'Pricebook entry for a product',
-      color: '#94e2d5'
+      color: '#2dd4bf'
     },
     constraint_rule: {
       label: 'Constraint Rule', icon: '\uD83D\uDEE1\uFE0F', object: `${NS}ConstraintRule__c`,
       defaults: { [`${NS}Active__c`]: 'true' },
       allowedChildren: ['constraint_rule_entry'],
       description: 'Product constraint rule',
-      color: '#f38ba8'
+      color: '#f85149'
     },
     constraint_rule_entry: {
       label: 'Rule Entry', icon: '\u2192', object: `${NS}ConstraintRuleEntry__c`,
@@ -68,14 +68,14 @@ const DataBuilderPanel = (() => {
       parentField: `${NS}ConstraintRuleId__c`,
       allowedChildren: [],
       description: 'Constraint rule entry',
-      color: '#fab387'
+      color: '#d29922'
     },
     custom: {
       label: 'Custom', icon: '\u2726', object: '',
       defaults: {},
       allowedChildren: ['custom'],
       description: 'Any sObject',
-      color: '#7f849c'
+      color: '#6e7681'
     }
   };
 
@@ -510,10 +510,10 @@ const DataBuilderPanel = (() => {
     var h = '<div class="sfdt-db-empty">'
       + '<div class="sfdt-db-empty-ico">'
       + '<svg width="48" height="48" viewBox="0 0 48 48" fill="none">'
-      + '<rect x="4" y="4" width="16" height="12" rx="3" stroke="#585b70" stroke-width="1.4"/>'
-      + '<rect x="28" y="4" width="16" height="12" rx="3" stroke="#585b70" stroke-width="1.4"/>'
-      + '<rect x="16" y="32" width="16" height="12" rx="3" stroke="#585b70" stroke-width="1.4"/>'
-      + '<path d="M12 16v6h12m12-6v6h-12m0 0v10" stroke="#585b70" stroke-width="1.2" stroke-linecap="round"/>'
+      + '<rect x="4" y="4" width="16" height="12" rx="3" stroke="#383e4a" stroke-width="1.4"/>'
+      + '<rect x="28" y="4" width="16" height="12" rx="3" stroke="#383e4a" stroke-width="1.4"/>'
+      + '<rect x="16" y="32" width="16" height="12" rx="3" stroke="#383e4a" stroke-width="1.4"/>'
+      + '<path d="M12 16v6h12m12-6v6h-12m0 0v10" stroke="#383e4a" stroke-width="1.2" stroke-linecap="round"/>'
       + '</svg></div>'
       + '<div class="sfdt-db-empty-h">Build a CPQ product hierarchy</div>'
       + '<div class="sfdt-db-empty-p">Start from a template or add individual nodes below.</div>'
@@ -622,7 +622,7 @@ const DataBuilderPanel = (() => {
       for (var ui = 0; ui < allowed.length; ui++) {
         if (NODE_TYPES[allowed[ui]].canUseExisting) {
           h += '<button class="sfdt-db-add-child-btn sfdt-db-use-existing-btn" data-parent="' + node.id + '" data-type="' + allowed[ui] + '">'
-            + '<span class="sfdt-db-acb-dot" style="background:#585b70"></span>\uD83D\uDD0D Use Existing ' + NODE_TYPES[allowed[ui]].label + '</button>';
+            + '<span class="sfdt-db-acb-dot" style="background:#383e4a"></span>\uD83D\uDD0D Use Existing ' + NODE_TYPES[allowed[ui]].label + '</button>';
         }
       }
       h += '</span></span>';
