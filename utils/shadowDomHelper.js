@@ -585,6 +585,105 @@ svg {
   background: var(--bg3);
 }
 
+/* ── Pinned Favorites Grid ── */
+.sfdt-pinned-grid {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  padding: 6px 16px 10px !important;
+}
+
+.sfdt-pinned-tile {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 6px 4px 5px !important;
+  background: linear-gradient(135deg, #1a2233 0%, #151c2a 100%) !important;
+  border: 1px solid #2d3548 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  text-align: center !important;
+  transition: all 0.15s ease !important;
+  width: 68px !important;
+  gap: 3px !important;
+}
+
+.sfdt-pinned-tile:hover {
+  border-color: var(--accent, #58a6ff) !important;
+  box-shadow: 0 0 0 1px var(--accent, #58a6ff), 0 2px 8px rgba(88,166,255,0.12) !important;
+  background: linear-gradient(135deg, #1e2840 0%, #192030 100%) !important;
+}
+
+.sfdt-pinned-tile-initial {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  color: #fff !important;
+  flex-shrink: 0 !important;
+  text-transform: uppercase !important;
+}
+
+.sfdt-pinned-tile-name {
+  font-size: 9px !important;
+  font-weight: 500 !important;
+  color: var(--fg, #e1e4e8) !important;
+  line-height: 1.2 !important;
+  overflow: hidden !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  word-break: break-word !important;
+  max-width: 100% !important;
+}
+
+.sfdt-pinned-tile-type {
+  display: none !important;
+}
+
+.sfdt-pinned-tile .sfdt-unpin-btn {
+  position: absolute !important;
+  top: -4px !important;
+  right: -4px !important;
+  width: 14px !important;
+  height: 14px !important;
+  padding: 1px !important;
+  opacity: 0 !important;
+  background: rgba(0,0,0,0.6) !important;
+  border-radius: 50% !important;
+}
+
+.sfdt-pinned-tile .sfdt-unpin-btn svg {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.sfdt-pinned-tile:hover .sfdt-unpin-btn {
+  opacity: 1 !important;
+}
+
+.sfdt-pinned-tile.dragging {
+  opacity: 0.35 !important;
+  transform: scale(0.9) !important;
+}
+
+.sfdt-pinned-tile.drag-over {
+  border: 1.5px dashed var(--accent, #58a6ff) !important;
+  background: rgba(88,166,255,0.08) !important;
+}
+
+.sfdt-pinned-tile.disabled {
+  opacity: 0.45 !important;
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+}
+
 .sfdt-impact-btn {
   background: none;
   border: none;

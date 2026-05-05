@@ -45,7 +45,7 @@ const SearchPalette = (() => {
   const AUTO_SEARCH_KEY = 'sfdt_auto_search';
   const ONBOARD_KEY = 'sfdt_search_onboarded_v2';
   function RECENT_RECORDS_KEY() { return _orgKey('sfdt_recent_records'); }
-  const PINNED_KEY = 'sfdt_pinned_items'; // Global — pins work across all orgs
+  const PINNED_KEY = 'sfdt_pinned_items';
   const AUTO_SEARCH_DEBOUNCE = 500;
   const MAX_HISTORY = 30;
   const MAX_RECENT_RECORDS = 20;
@@ -98,7 +98,7 @@ const SearchPalette = (() => {
   }
 
   // ─── Pinned Favorites ────────────────────────────────
-  function _togglePin(result) {
+  function _togglePin(result, customName) {
     if (!result) return;
     const id = result.id || result.name;
     const existing = _pinnedItems.findIndex(p => (p.id || p.name) === id);
@@ -108,7 +108,8 @@ const SearchPalette = (() => {
       // Store all properties needed for navigation
       const pin = {
         id: result.id,
-        name: result.name || result.label,
+        name: customName || result.name || result.label,
+        apiName: result.name || result.label,
         type: result.type,
         sobjectType: result.sobjectType,
         matchType: result.matchType,
@@ -138,6 +139,52 @@ const SearchPalette = (() => {
   async function _loadPinnedItems() {
     const data = await _storageGet(PINNED_KEY);
     _pinnedItems = Array.isArray(data) ? data : [];
+  }
+
+  // Resolve pinned items against the current org's metadata index.
+  // Updates org-specific IDs (id, keyPrefix, entityId, etc.) so pins work cross-org.
+  function _resolvePinnedIds() {
+    if (!META().isReady() || _pinnedItems.length === 0) return;
+    const idx = META().getIndex();
+    const allItems = Object.values(idx).flat();
+    let updated = false;
+    _pinnedItems.forEach(p => {
+      // Try multiple lookup strategies: apiName, name, partial match
+      const candidates = [p.apiName, p.name].filter(Boolean);
+      let match = null;
+      for (const lookupName of candidates) {
+        match = allItems.find(m => m.name === lookupName && m.type === p.type)
+             || allItems.find(m => m.label === lookupName && m.type === p.type);
+        if (match) break;
+        // Partial match: index label contains lookup or vice versa
+        match = allItems.find(m => m.type === p.type && m.label && lookupName &&
+          (m.label.toLowerCase().includes(lookupName.toLowerCase()) ||
+           lookupName.toLowerCase().includes(m.label.toLowerCase())));
+        if (match) break;
+      }
+      // Also try name-only (no type filter) as last resort
+      if (!match) {
+        for (const lookupName of candidates) {
+          match = allItems.find(m => m.name === lookupName)
+               || allItems.find(m => m.label === lookupName);
+          if (match) break;
+        }
+      }
+      if (match) {
+        // Overwrite org-specific fields with current org's values
+        // Also fix apiName to the real API name for future lookups
+        if (match.name && match.name !== p.apiName) { p.apiName = match.name; updated = true; }
+        if (match.id !== undefined && match.id !== p.id) { p.id = match.id; updated = true; }
+        if (match.keyPrefix !== undefined && match.keyPrefix !== p.keyPrefix) { p.keyPrefix = match.keyPrefix; updated = true; }
+        if (match.entityId !== undefined) { p.entityId = match.entityId; updated = true; }
+        if (match.setupId !== undefined) { p.setupId = match.setupId; updated = true; }
+        if (match.url) { p.url = match.url; updated = true; }
+        if (match.path) { p.path = match.path; updated = true; }
+        if (match.classicPath) { p.classicPath = match.classicPath; updated = true; }
+        if (match.sobjectName) { p.sobjectName = match.sobjectName; updated = true; }
+      }
+    });
+    if (updated) _storageSet(PINNED_KEY, _pinnedItems);
   }
 
   const TYPE_FILTERS = [
@@ -269,6 +316,9 @@ const SearchPalette = (() => {
         const count = Object.values(idx).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
         metaStatus.textContent = `${count} items indexed`;
         setTimeout(() => { metaStatus.textContent = `${count} items`; }, 3000);
+        // Resolve pinned IDs now that the index is ready, then re-render to enable tiles
+        _resolvePinnedIds();
+        if (_visible && (!_input || !_input.value.trim())) _showSearchHistory();
       });
     } else {
       const idx = META().getIndex();
@@ -1007,9 +1057,18 @@ const SearchPalette = (() => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.index, 10);
         const r = _currentResults[idx];
-        _togglePin(r);
-        btn.classList.toggle('pinned');
-        btn.title = _isPinned(r) ? 'Unpin' : 'Pin to favorites';
+        if (_isPinned(r)) {
+          _togglePin(r);
+          btn.classList.remove('pinned');
+          btn.title = 'Pin to favorites';
+        } else {
+          const defaultName = r.name || r.label || r.id || '';
+          const customName = prompt('Name this favorite:', defaultName);
+          if (customName === null) return; // user cancelled
+          _togglePin(r, customName.trim() || defaultName);
+          btn.classList.add('pinned');
+          btn.title = 'Unpin';
+        }
       });
     });
 
@@ -1321,29 +1380,26 @@ const SearchPalette = (() => {
 
     // ── Pinned Favorites ──
     if (_pinnedItems.length > 0) {
-      const showAll = _pinsExpanded || _pinnedItems.length <= PINNED_COLLAPSED_COUNT;
-      const visiblePins = showAll ? _pinnedItems : _pinnedItems.slice(0, PINNED_COLLAPSED_COUNT);
-      const hiddenCount = _pinnedItems.length - PINNED_COLLAPSED_COUNT;
+      const tileColors = ['#2563eb','#7c3aed','#0891b2','#059669','#d97706','#dc2626','#0d9488','#4f46e5','#c026d3','#ea580c'];
+      const indexReady = META().isReady();
       html += `
         <div style="padding:6px 16px;font-size:11px;color:#6e7681;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center">
-          <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-flex;width:12px;height:12px">${I.pin}</span> Pinned Favorites (${_pinnedItems.length})</span>
+          <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-flex;width:12px;height:12px">${I.pin}</span> Pinned Favorites (${_pinnedItems.length})${!indexReady ? ' <span style="font-size:9px;color:#d29922;font-weight:400;text-transform:none;letter-spacing:0">· Indexing...</span>' : ''}</span>
         </div>
-        ${visiblePins.map((p, i) => `
-          <div class="sfdt-result sfdt-pinned-item" data-pin-index="${i}">
-            <span class="sfdt-result-icon">${_getPinnedIcon(p)}</span>
-            <div class="sfdt-result-content">
-              <div class="sfdt-result-name">${_escapeHTML(p.name || p.id)}</div>
-              <div class="sfdt-result-sub">${_escapeHTML(p.type || p.matchType || '')}</div>
-            </div>
-            <button class="sfdt-unpin-btn" data-pin-index="${i}" title="Unpin">${I.x}</button>
-            <button class="sfdt-result-newtab sfdt-pin-newtab" data-pin-index="${i}" title="Open in new tab">${I.externalLink}</button>
-          </div>
-        `).join('')}`;
-      if (!showAll && hiddenCount > 0) {
-        html += `<div class="sfdt-result" id="sfdt-show-more-pins" style="justify-content:center;cursor:pointer;color:#58a6ff;font-size:11px;padding:6px 16px">Show ${hiddenCount} more pinned items</div>`;
-      } else if (_pinsExpanded && _pinnedItems.length > PINNED_COLLAPSED_COUNT) {
-        html += `<div class="sfdt-result" id="sfdt-show-less-pins" style="justify-content:center;cursor:pointer;color:#58a6ff;font-size:11px;padding:6px 16px">Show less</div>`;
-      }
+        <div class="sfdt-pinned-grid">
+          ${_pinnedItems.map((p, i) => {
+            const label = p.name || p.id || '';
+            const initials = label.split(/[\s_-]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+            const color = tileColors[i % tileColors.length];
+            return `
+            <div class="sfdt-pinned-tile${!indexReady ? ' disabled' : ''}" data-pin-index="${i}" draggable="true" title="${!indexReady ? 'Waiting for index to load...' : _escapeHTML(p.type || p.matchType || '')}">
+              <button class="sfdt-unpin-btn" data-pin-index="${i}" title="Unpin">${I.x}</button>
+              <div class="sfdt-pinned-tile-initial" style="background:${!indexReady ? '#4b5563' : color}">${initials}</div>
+              <div class="sfdt-pinned-tile-name">${_escapeHTML(label)}</div>
+              <div class="sfdt-pinned-tile-type">${_escapeHTML(p.type || p.matchType || '')}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
     }
 
     // ── Recent (records + searches merged) ──
@@ -1410,14 +1466,18 @@ const SearchPalette = (() => {
     });
 
     // ── Wire up handlers ──
-    _resultsList.querySelectorAll('.sfdt-pinned-item').forEach(el => {
+
+    // Pinned tile click → navigate (blocked when disabled/indexing)
+    _resultsList.querySelectorAll('.sfdt-pinned-tile').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('.sfdt-unpin-btn') || e.target.closest('.sfdt-pin-newtab')) return;
+        if (e.target.closest('.sfdt-unpin-btn')) return;
+        if (el.classList.contains('disabled')) return;
         const p = _pinnedItems[parseInt(el.dataset.pinIndex, 10)];
-        if (p) _navigateToPinnedOrRecent(p);
+        if (p) _navigateToPinnedOrRecent(p, e.metaKey || e.ctrlKey);
       });
     });
 
+    // Unpin button
     _resultsList.querySelectorAll('.sfdt-unpin-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1428,13 +1488,38 @@ const SearchPalette = (() => {
       });
     });
 
-    _resultsList.querySelector('#sfdt-show-more-pins')?.addEventListener('click', () => {
-      _pinsExpanded = true;
-      _showSearchHistory();
-    });
-    _resultsList.querySelector('#sfdt-show-less-pins')?.addEventListener('click', () => {
-      _pinsExpanded = false;
-      _showSearchHistory();
+    // ── Drag-and-drop reordering for pinned tiles ──
+    let _dragSourceIdx = null;
+    _resultsList.querySelectorAll('.sfdt-pinned-tile').forEach(el => {
+      el.addEventListener('dragstart', (e) => {
+        _dragSourceIdx = parseInt(el.dataset.pinIndex, 10);
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(_dragSourceIdx));
+      });
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.classList.add('drag-over');
+      });
+      el.addEventListener('dragleave', () => {
+        el.classList.remove('drag-over');
+      });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        const targetIdx = parseInt(el.dataset.pinIndex, 10);
+        if (_dragSourceIdx !== null && _dragSourceIdx !== targetIdx) {
+          const moved = _pinnedItems.splice(_dragSourceIdx, 1)[0];
+          _pinnedItems.splice(targetIdx, 0, moved);
+          _storageSet(PINNED_KEY, _pinnedItems);
+          _showSearchHistory();
+        }
+      });
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        _dragSourceIdx = null;
+      });
     });
 
     _resultsList.querySelector('#sfdt-clear-all-recent')?.addEventListener('click', (e) => {
@@ -1451,14 +1536,6 @@ const SearchPalette = (() => {
         if (e.target.closest('.sfdt-recent-newtab')) return;
         const r = _recentRecords[parseInt(el.dataset.recentIndex, 10)];
         if (r) _navigateToPinnedOrRecent(r);
-      });
-    });
-
-    _resultsList.querySelectorAll('.sfdt-pin-newtab').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const p = _pinnedItems[parseInt(btn.dataset.pinIndex, 10)];
-        if (p) _navigateToPinnedOrRecent(p, true);
       });
     });
 
@@ -1502,6 +1579,7 @@ const SearchPalette = (() => {
       || document.querySelector('one-app-nav-bar')
       || window.location.pathname.startsWith('/lightning');
 
+    // IDs are already resolved by _resolvePinnedIds on palette open — navigate directly
     let url;
     if (item.matchType === 'record' && item.id) {
       url = isLightning
@@ -1512,13 +1590,10 @@ const SearchPalette = (() => {
         ? `${base}/lightning/setup/ObjectManager/${encodeURIComponent(item.entityName)}/FieldsAndRelationships/${encodeURIComponent(item.fieldApiName)}/view`
         : `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(item.entityName)}&setupid=CustomObjects`;
     } else if (item.type === 'Tab' && item.url) {
-      // Tab items: use the stored url directly
       url = item.url.startsWith('http') ? item.url : `${base}${item.url}`;
     } else if (item.type === 'SetupPage' && item.path && item.classicPath) {
-      // SetupPage pins store both paths — pick the right one for current mode
       url = isLightning ? `${base}${item.path}` : `${base}${item.classicPath}`;
     } else {
-      // Use the same routing as normal search results
       url = META().getSetupUrl(item);
     }
     if (url) {
@@ -1560,6 +1635,7 @@ const SearchPalette = (() => {
     requestAnimationFrame(() => _input.focus());
     // Load all persisted data then show
     Promise.all([_loadRecentRecords(), _loadPinnedItems()]).then(() => {
+      _resolvePinnedIds();
       _showSearchHistory();
       _showOnboardingIfNeeded();
     });
