@@ -99,13 +99,23 @@ const DependencyPanel = (() => {
       }
     }
 
-    // Try Apex Class
+    // Try Apex Class (exact match)
     try {
       const r = await API().toolingQuery(
         `SELECT Id, Name FROM ApexClass WHERE Name = '${input.replace(/'/g, "''")}' LIMIT 1`
       );
       if (r.records && r.records.length > 0) {
         return { id: r.records[0].Id, name: r.records[0].Name, type: 'ApexClass' };
+      }
+    } catch { /* continue */ }
+
+    // Try Apex Trigger
+    try {
+      const r = await API().toolingQuery(
+        `SELECT Id, Name FROM ApexTrigger WHERE Name = '${input.replace(/'/g, "''")}' LIMIT 1`
+      );
+      if (r.records && r.records.length > 0) {
+        return { id: r.records[0].Id, name: r.records[0].Name, type: 'ApexTrigger' };
       }
     } catch { /* continue */ }
 
@@ -119,7 +129,27 @@ const DependencyPanel = (() => {
       }
     } catch { /* continue */ }
 
-    // Try by name pattern across MetadataComponentDependency
+    // Try CustomObject
+    try {
+      const r = await API().toolingQuery(
+        `SELECT DurableId, QualifiedApiName FROM EntityDefinition WHERE QualifiedApiName = '${input.replace(/'/g, "''")}' LIMIT 1`
+      );
+      if (r.records && r.records.length > 0) {
+        return { id: r.records[0].DurableId, name: r.records[0].QualifiedApiName, type: 'CustomObject' };
+      }
+    } catch { /* continue */ }
+
+    // Try fuzzy match — Apex class name contains the input
+    try {
+      const r = await API().toolingQuery(
+        `SELECT Id, Name FROM ApexClass WHERE Name LIKE '${input.replace(/'/g, "''")}%' LIMIT 5`
+      );
+      if (r.records && r.records.length === 1) {
+        return { id: r.records[0].Id, name: r.records[0].Name, type: 'ApexClass' };
+      }
+    } catch { /* continue */ }
+
+    // Last resort: try by name in MetadataComponentDependency (but match exactly)
     try {
       const r = await API().toolingQuery(
         `SELECT MetadataComponentId, MetadataComponentName, MetadataComponentType FROM MetadataComponentDependency WHERE MetadataComponentName = '${input.replace(/'/g, "''")}' LIMIT 1`
@@ -164,6 +194,102 @@ const DependencyPanel = (() => {
     }
 
     _depCache[cacheKey] = results;
+    return results;
+  }
+
+  // ─── Fallback: SOSL-based scan when MetadataComponentDependency returns nothing ──
+
+  async function _fetchFallbackDependencies(fieldApiName, objectName) {
+    const results = { inbound: [], outbound: [], source: 'sosl' };
+    const soslEscape = (s) => s.replace(/[?&|!{}[\]()^~*:\\"'+\-]/g, '\\$&');
+    const soslField = soslEscape(fieldApiName);
+    const escapedObjectName = objectName ? objectName.replace(/'/g, "''") : '';
+
+    const errors = [];
+
+    // Strip namespace for broader matching
+    const shortName = fieldApiName.replace(/^\w+__/, '');
+    const useShort = shortName !== fieldApiName;
+
+    try {
+      // Parallel: SOSL for Apex + Tooling queries for VRs and Workflows
+      const [apexResults, validationRules, workflows] = await Promise.all([
+        // Apex Classes + Triggers via SOSL
+        API().toolingSearch(
+          `FIND {${soslField}} IN ALL FIELDS RETURNING ApexClass(Id, Name), ApexTrigger(Id, Name) LIMIT 50`
+        ).then(r => {
+          const results = r || [];
+          return Array.isArray(results) ? results.flat() : (results.searchRecords || []);
+        }).catch(e => { errors.push('Apex: ' + e.message); return []; }),
+
+        // Validation Rules
+        objectName ? API().toolingQuery(
+          `SELECT Id, ValidationName, Active, Metadata FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '${escapedObjectName}' LIMIT 200`
+        ).then(r => {
+          const rules = r.records || [];
+          const fieldLower = fieldApiName.toLowerCase();
+          const shortLower = shortName.toLowerCase();
+          return rules.filter(v => {
+            const formula = (v.Metadata && v.Metadata.errorConditionFormula) || '';
+            return formula.toLowerCase().includes(fieldLower) || (useShort && formula.toLowerCase().includes(shortLower));
+          });
+        }).catch(e => { errors.push('VR: ' + e.message); return []; }) : Promise.resolve([]),
+
+        // Workflow Field Updates
+        objectName ? API().toolingQuery(
+          `SELECT Id, Name, FieldDefinitionId FROM WorkflowFieldUpdate WHERE EntityDefinitionId = '${escapedObjectName}' LIMIT 200`
+        ).then(r => {
+          const updates = r.records || [];
+          const fieldLower = fieldApiName.toLowerCase();
+          return updates.filter(w => (w.FieldDefinitionId || '').toLowerCase().includes(fieldLower));
+        }).catch(e => { errors.push('WFU: ' + e.message); return []; }) : Promise.resolve([])
+      ]);
+
+      // Convert SOSL results into dependency-like format for graph building
+      apexResults.forEach(r => {
+        const type = r.attributes && r.attributes.type === 'ApexTrigger' ? 'ApexTrigger' : 'ApexClass';
+        results.inbound.push({
+          MetadataComponentId: r.Id,
+          MetadataComponentName: r.Name,
+          MetadataComponentType: type,
+          MetadataComponentNamespace: '',
+          RefMetadataComponentId: fieldApiName,
+          RefMetadataComponentName: fieldApiName,
+          RefMetadataComponentType: 'CustomField'
+        });
+      });
+
+      validationRules.forEach(v => {
+        results.inbound.push({
+          MetadataComponentId: v.Id,
+          MetadataComponentName: v.ValidationName,
+          MetadataComponentType: 'ValidationRule',
+          MetadataComponentNamespace: '',
+          RefMetadataComponentId: fieldApiName,
+          RefMetadataComponentName: fieldApiName,
+          RefMetadataComponentType: 'CustomField'
+        });
+      });
+
+      workflows.forEach(w => {
+        results.inbound.push({
+          MetadataComponentId: w.Id,
+          MetadataComponentName: w.Name,
+          MetadataComponentType: 'WorkflowFieldUpdate',
+          MetadataComponentNamespace: '',
+          RefMetadataComponentId: fieldApiName,
+          RefMetadataComponentName: fieldApiName,
+          RefMetadataComponentType: 'CustomField'
+        });
+      });
+
+      if (errors.length > 0) {
+        window._sfdtLogger.debug('[SFDT] Fallback scan partial errors:', errors);
+      }
+    } catch (e) {
+      window._sfdtLogger.debug('[SFDT] Fallback scan error:', e.message);
+    }
+
     return results;
   }
 
@@ -682,14 +808,42 @@ const DependencyPanel = (() => {
     _panX = 0; _panY = 0; _zoom = 1;
 
     try {
-      const deps = await _fetchDependencies(resolved.id, _direction);
+      // Try MetadataComponentDependency first (official API)
+      let deps = await _fetchDependencies(resolved.id, _direction);
+      let totalDeps = (deps.inbound || []).length + (deps.outbound || []).length;
+      let dataSource = 'MetadataComponentDependency API';
+
+      // If 0 results and it's a field, try SOSL-based fallback
+      if (totalDeps === 0 && resolved.type === 'CustomField' && resolved.name && resolved.name.includes('.')) {
+        _showLoading('No API dependencies — scanning code references...');
+        const parts = resolved.name.split('.');
+        const objectName = parts[0];
+        const fieldName = parts.slice(1).join('.');
+        deps = await _fetchFallbackDependencies(fieldName, objectName);
+        totalDeps = (deps.inbound || []).length + (deps.outbound || []).length;
+        dataSource = 'code scan (SOSL)';
+      }
+
+      // If still 0 and it's a field, also try with just the field API name
+      if (totalDeps === 0 && resolved.name && resolved.name.includes('.')) {
+        _showLoading('Trying broader scan...');
+        const parts = resolved.name.split('.');
+        const fieldName = parts.slice(1).join('.');
+        deps = await _fetchFallbackDependencies(fieldName, parts[0]);
+        totalDeps = (deps.inbound || []).length + (deps.outbound || []).length;
+        dataSource = 'code scan (SOSL)';
+      }
+
       _buildGraph(resolved, deps);
       _updateFilters();
       _render();
 
-      const totalDeps = (deps.inbound || []).length + (deps.outbound || []).length;
       const detail = _container.querySelector('#dep-detail');
       if (detail) {
+        const sourceLabel = deps.source === 'sosl'
+          ? '<span style="color:#f97316;font-size:10px">⚠ Data from code text search (not Dependency API)</span>'
+          : '<span style="color:#22c55e;font-size:10px">✓ Data from Salesforce Dependency API</span>';
+
         detail.innerHTML = `
           <div class="sfdt-dep-detail-header">
             <span class="sfdt-dep-detail-type" style="background:${(TYPE_COLORS[resolved.type] || '#8b949e')}20;color:${TYPE_COLORS[resolved.type] || '#8b949e'}">${_esc(TYPE_SHORT[resolved.type] || resolved.type)}</span>
@@ -700,8 +854,9 @@ const DependencyPanel = (() => {
             <span>← ${(deps.inbound || []).length} inbound</span>
             <span>→ ${(deps.outbound || []).length} outbound</span>
           </div>
-          <div style="margin-top:8px;font-size:11px;color:#8b949e">
-            ${totalDeps === 0 ? 'No dependencies found via MetadataComponentDependency API.' : `${totalDeps} total dependencies. Click a node for details. Double-click to expand.`}
+          <div style="margin-top:4px">${sourceLabel}</div>
+          <div style="margin-top:6px;font-size:11px;color:#8b949e">
+            ${totalDeps === 0 ? 'No references found for this component.' : `${totalDeps} total references. Click a node for details. Double-click to expand.`}
           </div>
         `;
       }
@@ -723,34 +878,42 @@ const DependencyPanel = (() => {
     const I = ICONS();
     container.innerHTML = `
       <div class="sfdt-panel sfdt-panel-right sfdt-dep-panel" id="dep-panel" style="display:none">
-        <div class="sfdt-panel-header" style="padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border,#2d333b)">
-          <span style="width:18px;height:18px;display:flex;color:var(--accent,#58a6ff)">${I.graph}</span>
-          <span style="font-size:13px;font-weight:600;color:var(--fg,#e1e4e8);flex:1">Dependency Graph</span>
+        <div class="sfdt-panel-header">
+          <span style="width:18px;height:18px;display:flex;color:#58a6ff;flex-shrink:0">${I.graph}</span>
+          <span style="font-size:13px;font-weight:600;color:#e1e4e8;flex:1">Dependency Graph</span>
           <button class="sfdt-btn sfdt-btn-sm" id="dep-pin" title="Pin panel">${I.pin}</button>
           <button class="sfdt-btn sfdt-btn-sm" id="dep-close">${I.x}</button>
         </div>
 
-        <div style="padding:8px 12px;border-bottom:1px solid var(--border,#2d333b);display:flex;gap:6px;align-items:center">
-          <input type="text" id="dep-search" class="sfdt-input" placeholder="Object.Field, ApexClass, or FlowName" style="flex:1;font-size:12px;padding:5px 8px;background:var(--bg3,#141925);border:1px solid var(--border,#2d333b);border-radius:6px;color:var(--fg,#e1e4e8);outline:none" />
+        <div class="sfdt-dep-search-row">
+          <input type="text" id="dep-search" placeholder="e.g. Account.Industry or MyApexClass" />
           <button class="sfdt-btn sfdt-btn-sm sfdt-btn-accent" id="dep-search-btn">${I.search}</button>
         </div>
 
-        <div style="padding:4px 12px;border-bottom:1px solid var(--border,#2d333b);display:flex;gap:4px;align-items:center">
-          <span style="font-size:10px;color:var(--fg3,#6e7681);margin-right:4px">Direction:</span>
+        <div class="sfdt-dep-dir-row">
+          <span style="font-size:10px;color:#6e7681;margin-right:4px">Direction:</span>
           <button class="sfdt-btn sfdt-btn-xs sfdt-dep-dir-btn active" data-dir="both">Both</button>
           <button class="sfdt-btn sfdt-btn-xs sfdt-dep-dir-btn" data-dir="inbound">← Inbound</button>
           <button class="sfdt-btn sfdt-btn-xs sfdt-dep-dir-btn" data-dir="outbound">Outbound →</button>
         </div>
 
-        <div id="dep-filters" style="padding:4px 12px;border-bottom:1px solid var(--border,#2d333b);display:flex;flex-wrap:wrap;gap:4px;min-height:28px"></div>
+        <div id="dep-filters" class="sfdt-dep-filter-row"></div>
 
-        <div style="flex:1;position:relative;overflow:hidden;min-height:0">
-          <canvas id="dep-canvas" style="width:100%;height:100%;cursor:grab"></canvas>
-          <div id="dep-loading" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--fg2,#8b949e);background:var(--bg,#0f1419);padding:8px 16px;border-radius:8px;border:1px solid var(--border,#2d333b)">Loading...</div>
+        <div class="sfdt-dep-canvas-wrap">
+          <canvas id="dep-canvas"></canvas>
+          <div id="dep-loading" class="sfdt-dep-loading">Loading...</div>
         </div>
 
-        <div id="dep-detail" style="border-top:1px solid var(--border,#2d333b);padding:10px 12px;max-height:160px;overflow-y:auto;font-size:12px">
-          <div class="sfdt-dep-detail-empty">Search for a component to visualize dependencies</div>
+        <div id="dep-detail" class="sfdt-dep-detail">
+          <div class="sfdt-dep-detail-empty">
+            <div style="margin-bottom:8px;font-size:12px;color:#e1e4e8;font-weight:600">What to search:</div>
+            <div style="text-align:left;line-height:1.8;font-size:11px">
+              <span style="color:#fbbf24">Field:</span> <code style="color:#58a6ff;background:#1a1f2e;padding:1px 4px;border-radius:3px">Account.Industry</code><br>
+              <span style="color:#58a6ff">Apex:</span> <code style="color:#58a6ff;background:#1a1f2e;padding:1px 4px;border-radius:3px">MyController</code><br>
+              <span style="color:#22c55e">Flow:</span> <code style="color:#58a6ff;background:#1a1f2e;padding:1px 4px;border-radius:3px">My_Flow_Name</code><br>
+              <span style="color:#8b949e">ID:</span> <code style="color:#58a6ff;background:#1a1f2e;padding:1px 4px;border-radius:3px">01pXXXXXXXXXXXX</code>
+            </div>
+          </div>
         </div>
       </div>
     `;
