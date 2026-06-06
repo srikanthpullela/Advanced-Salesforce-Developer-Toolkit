@@ -782,30 +782,6 @@ svg {
   border-left: 1px solid var(--border, #2d333b);
 }
 
-.sfdt-result-newtab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--fg3);
-  cursor: pointer;
-  border-radius: 4px;
-  opacity: 0;
-  transition: opacity 0.12s, background 0.12s, color 0.12s;
-  padding: 0;
-  pointer-events: auto;
-}
-.sfdt-result-newtab svg { width: 14px; height: 14px; }
-.sfdt-result:hover .sfdt-result-newtab,
-.sfdt-result.selected .sfdt-result-newtab { opacity: 1; }
-.sfdt-result-newtab:hover {
-  background: var(--bg3);
-  color: var(--accent);
-}
 
 .sfdt-code-line {
   display: block;

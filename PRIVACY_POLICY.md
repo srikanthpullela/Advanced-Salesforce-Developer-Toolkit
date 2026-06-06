@@ -9,9 +9,33 @@ Advanced Salesforce Developer Toolkit ("the Extension") is a Chrome browser exte
 
 ## Data Collection
 
-**The Extension does not collect, transmit, store remotely, or sell any user data.**
+### Anonymous Usage Telemetry
 
-No personal information, usage analytics, telemetry, crash reports, or tracking data of any kind is gathered or sent to any external server, third-party service, or the Extension developer.
+The Extension collects **minimal, anonymous, org-level data** on first activation per Salesforce org to help the developer understand adoption. The following data is sent once per org to a Google Sheet:
+
+| Data Point | Example | Purpose |
+| --- | --- | --- |
+| Org ID | `00D000000000001` | Unique org identifier (deduplicate) |
+| Company Name | `Acme Corp` | Understand which companies use it |
+| Org Type | `Production` / `Sandbox` / `Developer Edition` | Usage patterns |
+| Is Sandbox | `true` / `false` | Distinguish test vs. production use |
+| Instance URL | `https://acme.my.salesforce.com` | Identify the Salesforce instance |
+| City / Country | `San Francisco, US` | Geographic distribution |
+| Extension Version | `1.3.2` | Track adoption of updates |
+| Installed Packages | `Apttus_Config2 (Conga CPQ)` | Identify which products are in use |
+| Timestamp | `2026-05-28T10:00:00Z` | When first activated |
+
+**What is NOT collected:** No usernames, email addresses, user IDs, IP addresses, browsing activity, query content, record data, or any personally identifiable information (PII).
+
+**Opt-out:** You can disable telemetry at any time by running this in the browser console on any Salesforce page:
+```javascript
+SFDTTelemetryService.optOut()
+```
+To re-enable: `SFDTTelemetryService.optIn()`
+
+### No Other Data Collection
+
+Beyond the one-time org-level telemetry described above, the Extension does not collect, transmit, store remotely, or sell any user data. No usage analytics, crash reports, or tracking data is gathered.
 
 ## Data Access
 
@@ -50,8 +74,8 @@ All locally stored data:
 
 - No data is sold, transferred, or disclosed to any third party
 - No data is used for advertising, marketing, or profiling
-- No data is sent to the Extension developer or any analytics service
-- No remote servers are contacted other than your own Salesforce org's API endpoints
+- The one-time org-level telemetry is sent to a Google Sheet controlled solely by the Extension developer, used only to understand adoption
+- No remote servers are contacted other than your own Salesforce org's API endpoints and the telemetry endpoint (once per org)
 
 ## Remote Code
 

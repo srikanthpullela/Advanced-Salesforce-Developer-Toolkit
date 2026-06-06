@@ -36,6 +36,7 @@
   const SOQL = window.SFDTSOQLPanel;
   const DEBUGLOG = window.SFDTDebugLogPanel;
   const EXECANON = window.SFDTExecuteAnonymousPanel;
+  const TELEMETRY = window.SFDTTelemetryService;
 
   // ─── Register listeners IMMEDIATELY (before session connect) ─────
   chrome.runtime.onMessage.addListener(_handleMessage);
@@ -102,6 +103,9 @@
 
     window._sfdtLogger.log('[SFDT] Connected to Salesforce.');
     window._sfdtLogger.log('[SFDT] Instance:', API.getInstanceUrl());
+
+    // Record anonymous telemetry (once per org, non-blocking)
+    TELEMETRY.recordInstall();
 
     // Start background indexing
     window._sfdtLogger.log('[SFDT] Starting metadata index build...');

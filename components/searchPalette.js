@@ -1033,14 +1033,13 @@ const SearchPalette = (() => {
         </div>
         ${typeBadge}
         <button class="sfdt-result-pin ${_isPinned(r) ? 'pinned' : ''}" data-index="${i}" title="${_isPinned(r) ? 'Unpin' : 'Pin to favorites'}">${ICONS().pin}</button>
-        <button class="sfdt-result-newtab" data-index="${i}" title="Open in new tab (Shift+Enter)">${ICONS().externalLink}</button>
       </div>`;
     }).join('');
 
     _resultsList.querySelectorAll('.sfdt-result').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('.sfdt-result-newtab') || e.target.closest('.sfdt-result-pin')) return;
-        _selectResult(parseInt(el.dataset.index, 10));
+        if (e.target.closest('.sfdt-result-pin')) return;
+        _selectResult(parseInt(el.dataset.index, 10), true);
       });
       el.addEventListener('mouseenter', () => {
         if (_keyboardNav) return; // ignore hover while arrow keys are active
@@ -1072,12 +1071,7 @@ const SearchPalette = (() => {
       });
     });
 
-    _resultsList.querySelectorAll('.sfdt-result-newtab').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        _selectResult(parseInt(btn.dataset.index, 10), true);
-      });
-    });
+
   }
 
   function _getTypeIcon(type) {
@@ -1145,7 +1139,7 @@ const SearchPalette = (() => {
       case 'Enter':
         e.preventDefault();
         if (_currentResults.length > 0 && _selectedIndex >= 0) {
-          _selectResult(_selectedIndex, e.shiftKey);
+          _selectResult(_selectedIndex, true);
         } else if (_currentResults.length === 0) {
           // History/favorites view — activate the selected item
           const items = _resultsList.querySelectorAll('.sfdt-result');
@@ -1423,7 +1417,6 @@ const SearchPalette = (() => {
               <div class="sfdt-result-name">${_escapeHTML(r.name || r.id)}</div>
               <div class="sfdt-result-sub">${_escapeHTML(r.sobjectType || r.type || '')} · ${_timeAgo(r.timestamp)}</div>
             </div>
-            <button class="sfdt-result-newtab sfdt-recent-newtab" data-recent-index="${_recentRecords.indexOf(r)}" title="Open in new tab">${I.externalLink}</button>
           </div>`;
         } else {
           const h = item.data;
@@ -1436,9 +1429,7 @@ const SearchPalette = (() => {
               <div class="sfdt-result-name">${_escapeHTML(h.query)}</div>
               <div class="sfdt-result-sub">${_escapeHTML(h.resultName || '')} · ${_escapeHTML(h.resultType || '')}</div>
             </div>
-            ${hasTarget
-              ? `<button class="sfdt-result-newtab sfdt-history-newtab" data-history-index="${hIdx}" title="Open in new tab">${I.externalLink}</button>`
-              : `<span class="sfdt-result-arrow" title="Re-run search">${I.arrowRight}</span>`}
+            ${!hasTarget ? `<span class="sfdt-result-arrow" title="Re-run search">${I.arrowRight}</span>` : ''}
           </div>`;
         }
       });
@@ -1467,13 +1458,13 @@ const SearchPalette = (() => {
 
     // ── Wire up handlers ──
 
-    // Pinned tile click → navigate (blocked when disabled/indexing)
+    // Pinned tile click → navigate in new tab (blocked when disabled/indexing)
     _resultsList.querySelectorAll('.sfdt-pinned-tile').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('.sfdt-unpin-btn')) return;
         if (el.classList.contains('disabled')) return;
         const p = _pinnedItems[parseInt(el.dataset.pinIndex, 10)];
-        if (p) _navigateToPinnedOrRecent(p, e.metaKey || e.ctrlKey);
+        if (p) _navigateToPinnedOrRecent(p, true);
       });
     });
 
@@ -1533,29 +1524,19 @@ const SearchPalette = (() => {
 
     _resultsList.querySelectorAll('.sfdt-recent-record').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('.sfdt-recent-newtab')) return;
         const r = _recentRecords[parseInt(el.dataset.recentIndex, 10)];
-        if (r) _navigateToPinnedOrRecent(r);
-      });
-    });
-
-    _resultsList.querySelectorAll('.sfdt-recent-newtab').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const r = _recentRecords[parseInt(btn.dataset.recentIndex, 10)];
         if (r) _navigateToPinnedOrRecent(r, true);
       });
     });
 
     _resultsList.querySelectorAll('.sfdt-history-item').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('.sfdt-history-newtab')) return;
         const idx = parseInt(el.dataset.index, 10);
         const h = _searchHistory[idx];
         // If the entry has a stored navigation target, navigate directly (no re-search).
         // Old entries without a target fall back to re-running the search.
         if (h && h.target && (h.target.id || h.target.url || h.target.path)) {
-          _navigateToPinnedOrRecent(h.target, false);
+          _navigateToPinnedOrRecent(h.target, true);
           return;
         }
         _input.value = el.dataset.query;
@@ -1563,14 +1544,7 @@ const SearchPalette = (() => {
       });
     });
 
-    _resultsList.querySelectorAll('.sfdt-history-newtab').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const idx = parseInt(btn.dataset.historyIndex, 10);
-        const h = _searchHistory[idx];
-        if (h && h.target) _navigateToPinnedOrRecent(h.target, true);
-      });
-    });
+
   }
 
   function _navigateToPinnedOrRecent(item, newTab) {

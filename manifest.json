@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Advanced Salesforce Developer Toolkit",
-  "version": "1.3.2",
+  "version": "1.3.4",
   "description": "SOQL editor, record inspector, Apex debug logs, metadata search, setup navigator — a Developer Console alternative.",
   "permissions": [
     "activeTab",
@@ -39,6 +39,7 @@
         "utils/salesforceApi.js",
         "utils/icons.js",
         "utils/shadowDomHelper.js",
+        "services/telemetryService.js",
         "services/metadataService.js",
         "services/searchService.js",
         "services/queryService.js",
