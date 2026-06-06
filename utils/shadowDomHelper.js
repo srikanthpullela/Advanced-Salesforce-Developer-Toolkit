@@ -2168,6 +2168,89 @@ mark.sfdt-highlight {
   margin-top: 4px !important;
   width: 100% !important;
 }
+.sfdt-dep-detail-actions {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 6px !important;
+}
+.sfdt-dep-drill-btn {
+  flex: 1 !important;
+}
+.sfdt-dep-setup-link {
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 11px !important;
+  color: var(--fg, #e1e4e8) !important;
+  background: var(--bg3, #141925) !important;
+  border: 1px solid var(--border, #2d333b) !important;
+}
+.sfdt-dep-setup-link:hover {
+  color: var(--accent, #58a6ff) !important;
+  border-color: var(--accent, #58a6ff) !important;
+}
+.sfdt-dep-detail-back {
+  transform: scaleX(-1) !important;
+  display: inline-flex !important;
+}
+
+/* ─── Breadcrumb Trail ─── */
+
+.sfdt-dep-breadcrumb {
+  padding: 4px 12px !important;
+  border-bottom: 1px solid var(--border, #2d333b) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  flex-wrap: wrap !important;
+  background: var(--bg2, #1a1f2e) !important;
+  min-height: 28px !important;
+  overflow-x: auto !important;
+}
+.sfdt-dep-back-btn {
+  transform: scaleX(-1) !important;
+  margin-right: 6px !important;
+  color: var(--accent, #58a6ff) !important;
+  flex-shrink: 0 !important;
+}
+.sfdt-dep-crumb {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--fg2, #8b949e) !important;
+  cursor: pointer !important;
+  transition: all 0.12s !important;
+  white-space: nowrap !important;
+}
+.sfdt-dep-crumb:hover {
+  background: var(--bg3, #141925) !important;
+  color: var(--fg, #e1e4e8) !important;
+}
+.sfdt-dep-crumb-current {
+  color: var(--fg, #e1e4e8) !important;
+  font-weight: 600 !important;
+  cursor: default !important;
+  background: var(--bg3, #141925) !important;
+}
+.sfdt-dep-crumb-type {
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.3px !important;
+}
+.sfdt-dep-crumb-name {
+  font-size: 10px !important;
+}
+.sfdt-dep-crumb-sep {
+  color: var(--fg3, #6e7681) !important;
+  font-size: 12px !important;
+  margin: 0 1px !important;
+}
 .sfdt-dep-badge {
   display: inline-flex !important;
   align-items: center !important;

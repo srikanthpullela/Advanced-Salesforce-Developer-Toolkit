@@ -37,6 +37,9 @@ const DependencyPanel = (() => {
   // Cache
   let _depCache = {};
 
+  // Navigation history for drill-in/back
+  let _navHistory = []; // [{resolved, nodes, edges, panX, panY, zoom}]
+
   // Type colors
   const TYPE_COLORS = {
     ApexClass: '#58a6ff',
@@ -615,37 +618,108 @@ const DependencyPanel = (() => {
   async function _onDblClick(e) {
     const rect = _canvas.getBoundingClientRect();
     const n = _nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    if (!n || _expandedNodes.has(n.id)) return;
+    if (!n) return;
 
-    // Expand this node's dependencies
-    _expandedNodes.add(n.id);
-    _showLoading('Expanding ' + (n.label || '') + '...');
+    // Drill into this node — make it the new center
+    await _drillInto(n);
+  }
 
-    try {
-      // Try MetadataComponentDependency first
-      let deps = await _fetchDependencies(n.id, _direction);
-      let total = (deps.inbound || []).length + (deps.outbound || []).length;
+  async function _drillInto(node) {
+    // Save current state to history for back navigation
+    _navHistory.push({
+      resolved: { id: _centerNodeId, name: _nodes.find(n => n.isCenter)?.label, type: _nodes.find(n => n.isCenter)?.type },
+      nodes: JSON.parse(JSON.stringify(_nodes)),
+      edges: JSON.parse(JSON.stringify(_edges)),
+      panX: _panX, panY: _panY, zoom: _zoom
+    });
 
-      // If 0 results and it's an Apex class, try SOSL fallback to find what fields it references
-      if (total === 0 && (n.type === 'ApexClass' || n.type === 'ApexTrigger') && n.label) {
-        // For Apex nodes, we can't easily scan "what does this class reference" via SOSL
-        // But we can show a message
-        _hideLoading();
-        _renderDetailPanel(n);
-        return;
-      }
+    // Load the clicked node as the new center
+    const resolved = { id: node.id, name: node.label, type: node.type };
+    await _loadComponent(resolved);
+    _updateBreadcrumb();
+  }
 
-      if (total > 0) {
-        _addToGraph(n, deps);
-        _layoutRadial();
-        _render();
-      }
-      _renderDetailPanel(n);
-    } catch (err) {
-      window._sfdtLogger.debug('[SFDT] Expand error:', err);
+  function _goBack() {
+    if (_navHistory.length === 0) return;
+    const prev = _navHistory.pop();
+    _nodes = prev.nodes;
+    _edges = prev.edges;
+    _centerNodeId = prev.resolved.id;
+    _panX = prev.panX;
+    _panY = prev.panY;
+    _zoom = prev.zoom;
+    _selectedNodeId = null;
+    _updateFilters();
+    _render();
+    _updateBreadcrumb();
+
+    // Update detail panel for center node
+    const center = _nodes.find(n => n.isCenter);
+    if (center) _renderDetailPanel(center);
+  }
+
+  function _updateBreadcrumb() {
+    const bar = _container.querySelector('#dep-breadcrumb');
+    if (!bar) return;
+
+    const I = ICONS();
+    const currentCenter = _nodes.find(n => n.isCenter);
+    const crumbs = _navHistory.map((h, i) => {
+      const color = TYPE_COLORS[h.resolved.type] || '#8b949e';
+      const shortType = TYPE_SHORT[h.resolved.type] || h.resolved.type || '';
+      const name = h.resolved.name || '';
+      const shortName = name.length > 20 ? name.substring(0, 18) + '…' : name;
+      return `<button class="sfdt-dep-crumb" data-idx="${i}" title="${_esc(name)}">
+        <span class="sfdt-dep-crumb-type" style="color:${color}">${_esc(shortType)}</span>
+        <span class="sfdt-dep-crumb-name">${_esc(shortName)}</span>
+      </button>`;
+    });
+
+    // Add current center as the last (non-clickable) crumb
+    if (currentCenter) {
+      const color = TYPE_COLORS[currentCenter.type] || '#8b949e';
+      const shortType = TYPE_SHORT[currentCenter.type] || currentCenter.type || '';
+      const shortName = (currentCenter.label || '').length > 20 ? currentCenter.label.substring(0, 18) + '…' : (currentCenter.label || '');
+      crumbs.push(`<span class="sfdt-dep-crumb sfdt-dep-crumb-current">
+        <span class="sfdt-dep-crumb-type" style="color:${color}">${_esc(shortType)}</span>
+        <span class="sfdt-dep-crumb-name">${_esc(shortName)}</span>
+      </span>`);
     }
 
-    _hideLoading();
+    const backBtn = _navHistory.length > 0
+      ? `<button class="sfdt-btn sfdt-btn-xs sfdt-dep-back-btn" id="dep-back" title="Go back">${I.arrowRight} Back</button>`
+      : '';
+
+    bar.innerHTML = `${backBtn}${crumbs.join('<span class="sfdt-dep-crumb-sep">›</span>')}`;
+
+    // Wire back button
+    const backEl = bar.querySelector('#dep-back');
+    if (backEl) backEl.addEventListener('click', _goBack);
+
+    // Wire breadcrumb clicks to jump back to that level
+    bar.querySelectorAll('.sfdt-dep-crumb[data-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetIdx = parseInt(btn.dataset.idx, 10);
+        // Pop history back to that point
+        while (_navHistory.length > targetIdx) {
+          const prev = _navHistory.pop();
+          _nodes = prev.nodes;
+          _edges = prev.edges;
+          _centerNodeId = prev.resolved.id;
+          _panX = prev.panX;
+          _panY = prev.panY;
+          _zoom = prev.zoom;
+        }
+        _selectedNodeId = null;
+        _updateFilters();
+        _render();
+        _updateBreadcrumb();
+        const center = _nodes.find(n => n.isCenter);
+        if (center) _renderDetailPanel(center);
+      });
+    });
+
+    bar.style.display = _navHistory.length > 0 ? 'flex' : 'none';
   }
 
   function _addToGraph(parentNode, depResults) {
@@ -705,7 +779,7 @@ const DependencyPanel = (() => {
     if (!detail) return;
 
     if (!node) {
-      detail.innerHTML = `<div class="sfdt-dep-detail-empty">Click a node to see details</div>`;
+      detail.innerHTML = `<div class="sfdt-dep-detail-empty">Click a node to see details. Double-click to drill in.</div>`;
       return;
     }
 
@@ -734,7 +808,12 @@ const DependencyPanel = (() => {
     const inboundCount = _edges.filter(e => e.target === node.id).length;
     const outboundCount = _edges.filter(e => e.source === node.id).length;
 
+    const backBtn = _navHistory.length > 0
+      ? `<button class="sfdt-btn sfdt-btn-xs sfdt-dep-detail-back" id="dep-detail-back" style="margin-bottom:6px">← Back</button>`
+      : '';
+
     detail.innerHTML = `
+      ${backBtn}
       <div class="sfdt-dep-detail-header">
         <span class="sfdt-dep-detail-type" style="background:${color}20;color:${color};border:1px solid ${color}40">${_esc(typeLabel)}</span>
         ${node.isCenter ? '<span class="sfdt-dep-detail-center">CENTER</span>' : ''}
@@ -742,31 +821,24 @@ const DependencyPanel = (() => {
       <div class="sfdt-dep-detail-name">${_esc(node.label)}</div>
       ${node.namespace ? `<div class="sfdt-dep-detail-ns">Namespace: ${_esc(node.namespace)}</div>` : ''}
       <div class="sfdt-dep-detail-stats">
-        <span title="Components that reference this">← ${inboundCount} inbound</span>
-        <span title="Components this references">→ ${outboundCount} outbound</span>
+        <span>← ${inboundCount} inbound</span>
+        <span>→ ${outboundCount} outbound</span>
       </div>
-      ${setupUrl ? `<a href="${setupUrl}" target="_blank" class="sfdt-dep-detail-link">Open in Setup →</a>` : ''}
-      ${!node.isCenter && !_expandedNodes.has(node.id) ? `<button class="sfdt-btn sfdt-btn-sm sfdt-dep-expand-btn" data-id="${node.id}">Expand Dependencies</button>` : ''}
+      <div class="sfdt-dep-detail-actions">
+        ${!node.isCenter ? `<button class="sfdt-btn sfdt-btn-sm sfdt-btn-accent sfdt-dep-drill-btn">Drill In →</button>` : ''}
+        ${setupUrl ? `<a href="${setupUrl}" target="_blank" class="sfdt-btn sfdt-btn-sm sfdt-dep-setup-link">Open in Setup</a>` : ''}
+      </div>
     `;
 
-    // Wire expand button
-    const expandBtn = detail.querySelector('.sfdt-dep-expand-btn');
-    if (expandBtn) {
-      expandBtn.addEventListener('click', async () => {
-        expandBtn.textContent = 'Loading...';
-        expandBtn.disabled = true;
-        _expandedNodes.add(node.id);
-        try {
-          const deps = await _fetchDependencies(node.id, _direction);
-          _addToGraph(node, deps);
-          _layoutRadial();
-          _render();
-          _renderDetailPanel(node);
-        } catch (err) {
-          expandBtn.textContent = 'Error';
-        }
-      });
+    // Wire drill-in button
+    const drillBtn = detail.querySelector('.sfdt-dep-drill-btn');
+    if (drillBtn) {
+      drillBtn.addEventListener('click', () => _drillInto(node));
     }
+
+    // Wire back button in detail
+    const backEl = detail.querySelector('#dep-detail-back');
+    if (backEl) backEl.addEventListener('click', _goBack);
   }
 
   // ─── Filter / Direction Controls ──────────────────────
@@ -832,6 +904,9 @@ const DependencyPanel = (() => {
     const query = input.value.trim();
     if (!query) return;
 
+    // New search — clear navigation history
+    _navHistory = [];
+
     _showLoading('Resolving component...');
     const resolved = await _resolveComponentId(query);
 
@@ -843,6 +918,7 @@ const DependencyPanel = (() => {
     }
 
     await _loadComponent(resolved);
+    _updateBreadcrumb();
   }
 
   async function _loadComponent(resolved) {
@@ -943,6 +1019,8 @@ const DependencyPanel = (() => {
         </div>
 
         <div id="dep-filters" class="sfdt-dep-filter-row"></div>
+
+        <div id="dep-breadcrumb" class="sfdt-dep-breadcrumb" style="display:none"></div>
 
         <div class="sfdt-dep-canvas-wrap">
           <canvas id="dep-canvas"></canvas>
