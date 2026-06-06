@@ -1032,44 +1032,69 @@ const InspectorPanel = (() => {
   }
 
   async function _runFieldImpactScan(fieldApiName, qualifiedName) {
-    const escapedField = fieldApiName.replace(/'/g, "''");
-
     // Strip namespace prefix for broader matching (e.g., Apttus_Config2__FieldName__c → FieldName__c)
     const shortName = fieldApiName.replace(/^\w+__/, '');
-    const escapedShort = shortName.replace(/'/g, "''");
     const useShort = shortName !== fieldApiName;
 
-    // Build LIKE clause — search both full name and short name for managed package fields
-    const apexLike = useShort
-      ? `(Body LIKE '%${escapedField}%' OR Body LIKE '%${escapedShort}%')`
-      : `Body LIKE '%${escapedField}%'`;
-    const vrLike = useShort
-      ? `(ErrorConditionFormula LIKE '%${escapedField}%' OR ErrorConditionFormula LIKE '%${escapedShort}%')`
-      : `ErrorConditionFormula LIKE '%${escapedField}%'`;
+    // SOSL search term — escape special SOSL characters
+    const soslEscape = (s) => s.replace(/[?&|!{}[\]()^~*:\\"'+\-]/g, '\\$&');
+    const soslField = soslEscape(fieldApiName);
+
+    // Escaped for SOQL string literals
+    const escapedObjectName = _objectName.replace(/'/g, "''");
 
     const errors = [];
 
     // Run queries in parallel
     const [apexClasses, apexTriggers, validationRules, workflows] = await Promise.all([
-      // Apex Classes referencing the field
-      API().toolingQuery(
-        `SELECT Id, Name, Body FROM ApexClass WHERE ${apexLike} LIMIT 50`
-      ).then(r => r.records || []).catch(e => { errors.push('Apex Classes: ' + e.message); return []; }),
+      // Apex Classes — use SOSL (Body can't be filtered with LIKE in SOQL)
+      API().toolingSearch(
+        `FIND {${soslField}} IN ALL FIELDS RETURNING ApexClass(Id, Name, Body) LIMIT 50`
+      ).then(r => {
+        // SOSL returns array of sObject arrays
+        const results = r || [];
+        return Array.isArray(results) ? results.flat() : (results.searchRecords || []);
+      }).catch(e => { errors.push('Apex Classes: ' + e.message); return []; }),
 
-      // Apex Triggers referencing the field
-      API().toolingQuery(
-        `SELECT Id, Name, Body, TableEnumOrId FROM ApexTrigger WHERE ${apexLike} LIMIT 50`
-      ).then(r => r.records || []).catch(e => { errors.push('Apex Triggers: ' + e.message); return []; }),
+      // Apex Triggers — use SOSL
+      API().toolingSearch(
+        `FIND {${soslField}} IN ALL FIELDS RETURNING ApexTrigger(Id, Name, Body, TableEnumOrId) LIMIT 50`
+      ).then(r => {
+        const results = r || [];
+        return Array.isArray(results) ? results.flat() : (results.searchRecords || []);
+      }).catch(e => { errors.push('Apex Triggers: ' + e.message); return []; }),
 
-      // Validation Rules on this object that reference this field
+      // Validation Rules — query all for this object, then filter client-side
+      // (ErrorConditionFormula is not a direct queryable column — it's inside Metadata)
       API().toolingQuery(
-        `SELECT Id, ValidationName, ErrorConditionFormula, Active FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '${_objectName}' AND ${vrLike} LIMIT 50`
-      ).then(r => r.records || []).catch(e => { errors.push('Validation Rules: ' + e.message); return []; }),
+        `SELECT Id, ValidationName, Active, Metadata FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '${escapedObjectName}' LIMIT 200`
+      ).then(r => {
+        const rules = r.records || [];
+        const fieldLower = fieldApiName.toLowerCase();
+        const shortLower = shortName.toLowerCase();
+        return rules.filter(v => {
+          const formula = (v.Metadata && v.Metadata.errorConditionFormula) || '';
+          const formulaLower = formula.toLowerCase();
+          return formulaLower.includes(fieldLower) || (useShort && formulaLower.includes(shortLower));
+        }).map(v => ({
+          ...v,
+          ErrorConditionFormula: v.Metadata ? v.Metadata.errorConditionFormula : ''
+        }));
+      }).catch(e => { errors.push('Validation Rules: ' + e.message); return []; }),
 
-      // Workflow Field Updates that reference this field on this object
+      // Workflow Field Updates — query all for this object, filter client-side
+      // (FieldDefinition subfields can't be filtered without EntityDefinitionId)
       API().toolingQuery(
-        `SELECT Id, Name, FieldDefinition.QualifiedApiName FROM WorkflowFieldUpdate WHERE EntityDefinition.QualifiedApiName = '${_objectName}' AND FieldDefinition.QualifiedApiName LIKE '%${escapedField}%' LIMIT 50`
-      ).then(r => r.records || []).catch(e => { errors.push('Workflow Updates: ' + e.message); return []; })
+        `SELECT Id, Name, FieldDefinitionId FROM WorkflowFieldUpdate WHERE EntityDefinitionId = '${escapedObjectName}' LIMIT 200`
+      ).then(r => {
+        const updates = r.records || [];
+        const fieldLower = fieldApiName.toLowerCase();
+        const shortLower = shortName.toLowerCase();
+        return updates.filter(w => {
+          const fid = (w.FieldDefinitionId || w.Name || '').toLowerCase();
+          return fid.includes(fieldLower) || (useShort && fid.includes(shortLower));
+        });
+      }).catch(e => { errors.push('Workflow Updates: ' + e.message); return []; })
     ]);
 
     return {
