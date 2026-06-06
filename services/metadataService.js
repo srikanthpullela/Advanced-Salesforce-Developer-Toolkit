@@ -243,6 +243,8 @@ const MetadataService = (() => {
       scale: f.scale,
       nillable: f.nillable,
       unique: f.unique,
+      updateable: f.updateable,
+      autoNumber: f.autoNumber,
       externalId: f.externalId,
       referenceTo: f.referenceTo,
       relationshipName: f.relationshipName,

@@ -593,7 +593,9 @@ const InspectorPanel = (() => {
     }
 
     body.querySelectorAll('.sfdt-copyable').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        // Don't copy if this is an editable field (edit takes priority)
+        if (el.classList.contains('sfdt-inline-edit')) return;
         _copy(el.dataset.copy || el.textContent);
         el.classList.add('copied');
         setTimeout(() => el.classList.remove('copied'), 1000);
@@ -601,7 +603,9 @@ const InspectorPanel = (() => {
     });
 
     body.querySelectorAll('.sfdt-inline-edit').forEach(el => {
-      el.addEventListener('dblclick', () => _startInlineEdit(el));
+      el.addEventListener('click', (e) => {
+        _startInlineEdit(el);
+      });
     });
 
     body.querySelectorAll('.sfdt-impact-btn').forEach(btn => {
@@ -647,11 +651,38 @@ const InspectorPanel = (() => {
 
   function _renderFieldRow(field) {
     const val = field.value;
-    const displayVal = val === null || val === undefined
-      ? '<span class="sfdt-null">null</span>'
-      : _esc(String(val));
     const isRelation = field.referenceTo && field.referenceTo.length > 0;
     const typeClass = `sfdt-type-${field.type.toLowerCase()}`;
+    const fieldType = (field.type || '').toLowerCase();
+    const isEditable = field.updateable && !field.calculated && !field.autoNumber;
+
+    // Render value cell content based on field type
+    let valueDisplay;
+    if (fieldType === 'boolean' && isEditable) {
+      // Toggle switch for editable booleans
+      valueDisplay = `<span class="sfdt-inline-edit sfdt-toggle-wrap" data-field="${_esc(field.name)}">
+        <span class="sfdt-toggle ${val ? 'sfdt-toggle-on' : 'sfdt-toggle-off'}" title="Click to toggle">
+          <span class="sfdt-toggle-track"><span class="sfdt-toggle-thumb"></span></span>
+        </span>
+        <span class="sfdt-toggle-label">${val ? 'true' : 'false'}</span>
+      </span>`;
+    } else if (val === null || val === undefined) {
+      valueDisplay = `<span class="${isEditable ? 'sfdt-inline-edit' : ''} sfdt-copyable" data-field="${_esc(field.name)}"
+            data-copy=""><span class="sfdt-null">null</span>${isEditable ? '<span class="sfdt-edit-hint">✎</span>' : ''}</span>`;
+    } else {
+      const displayVal = _esc(String(val));
+      valueDisplay = `<span class="${isEditable ? 'sfdt-inline-edit' : ''} sfdt-copyable" data-field="${_esc(field.name)}"
+            data-copy="${_esc(String(val))}">${displayVal}${isEditable ? '<span class="sfdt-edit-hint">✎</span>' : ''}</span>`;
+    }
+
+    // Read-only indicator for non-editable fields
+    if (!isEditable && fieldType !== 'boolean') {
+      const lockTitle = field.calculated ? 'Formula field' : field.autoNumber ? 'Auto-number' : 'Read-only';
+      valueDisplay = `<span class="sfdt-copyable sfdt-readonly-field" data-copy="${val != null ? _esc(String(val)) : ''}" title="${lockTitle}">
+        ${val === null || val === undefined ? '<span class="sfdt-null">null</span>' : _esc(String(val))}
+        <span class="sfdt-lock-icon">🔒</span>
+      </span>`;
+    }
 
     let compareCells = '';
     let rowDiffClass = '';
@@ -685,8 +716,7 @@ const InspectorPanel = (() => {
           <button class="sfdt-impact-btn" data-field="${_esc(field.name)}" data-label="${_esc(field.label)}" title="Field Impact Analysis">${ICONS().impact}</button>
         </td>
         <td class="sfdt-td-value ${_compareRecord && rowDiffClass ? 'sfdt-diff-highlight-a' : ''}">
-          <span class="sfdt-inline-edit sfdt-copyable" data-field="${_esc(field.name)}"
-                data-copy="${val != null ? _esc(String(val)) : ''}">${displayVal}</span>
+          ${valueDisplay}
         </td>
         <td><span class="${typeClass}">${_esc(field.type)}</span></td>
         ${compareCells}
@@ -739,25 +769,70 @@ const InspectorPanel = (() => {
     const field = _currentDescribe.find(f => f.name === fieldName);
     if (!field) return;
 
+    // Don't allow editing non-updateable fields
+    if (!field.updateable) return;
+
     const currentVal = _currentRecord[fieldName];
+    const fieldType = (field.type || '').toLowerCase();
+
+    // Boolean → instant toggle (no input needed)
+    if (fieldType === 'boolean') {
+      _saveField(el, fieldName, !currentVal);
+      return;
+    }
+
+    // Picklist → dropdown select
+    if (fieldType === 'picklist' && field.picklistValues && field.picklistValues.length > 0) {
+      const select = document.createElement('select');
+      select.className = 'sfdt-inline-input sfdt-inline-select';
+      // Add blank option for nillable fields
+      if (field.nillable) {
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '— None —';
+        select.appendChild(blank);
+      }
+      field.picklistValues.filter(p => p.active).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.value;
+        opt.textContent = p.label || p.value;
+        if (p.value === currentVal) opt.selected = true;
+        select.appendChild(opt);
+      });
+      el.innerHTML = '';
+      el.appendChild(select);
+      select.focus();
+
+      const save = () => _saveField(el, fieldName, select.value || null);
+      select.addEventListener('change', save);
+      select.addEventListener('blur', () => _renderFields());
+      select.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); _renderFields(); }
+      });
+      return;
+    }
+
+    // Number / Currency / Percent → number input
+    const isNumber = ['double', 'int', 'integer', 'currency', 'percent'].includes(fieldType);
+
     const input = document.createElement('input');
-    input.type = 'text';
+    input.type = isNumber ? 'number' : 'text';
     input.className = 'sfdt-inline-input';
     input.value = currentVal != null ? String(currentVal) : '';
+    if (isNumber) {
+      if (field.precision) input.step = field.scale ? Math.pow(10, -field.scale) : 1;
+    }
+    if (field.length && !isNumber) input.maxLength = field.length;
     el.innerHTML = '';
     el.appendChild(input);
     input.focus();
     input.select();
 
-    const save = async () => {
-      try {
-        await API().restPatch(_objectName, _recordId, { [fieldName]: input.value || null });
-        _currentRecord[fieldName] = input.value || null;
-        _renderFields();
-      } catch (err) {
-        el.innerHTML = `<span class="sfdt-error">${_esc(err.message)}</span>`;
-        setTimeout(() => _renderFields(), 2000);
-      }
+    const save = () => {
+      let val = input.value;
+      if (val === '') val = null;
+      else if (isNumber && val !== null) val = Number(val);
+      _saveField(el, fieldName, val);
     };
 
     input.addEventListener('blur', save);
@@ -765,6 +840,26 @@ const InspectorPanel = (() => {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
       if (e.key === 'Escape') { e.preventDefault(); _renderFields(); }
     });
+  }
+
+  async function _saveField(el, fieldName, newValue) {
+    try {
+      el.innerHTML = '<span class="sfdt-saving">Saving...</span>';
+      await API().restPatch(_objectName, _recordId, { [fieldName]: newValue });
+      _currentRecord[fieldName] = newValue;
+      _renderFields();
+      // Brief success flash
+      setTimeout(() => {
+        const updated = _container.querySelector(`[data-field="${fieldName}"]`);
+        if (updated) {
+          updated.classList.add('sfdt-save-success');
+          setTimeout(() => updated.classList.remove('sfdt-save-success'), 1200);
+        }
+      }, 50);
+    } catch (err) {
+      el.innerHTML = `<span class="sfdt-error">${_esc(err.message)}</span>`;
+      setTimeout(() => _renderFields(), 2500);
+    }
   }
 
   function _showJSON() {
@@ -937,11 +1032,11 @@ const InspectorPanel = (() => {
   }
 
   async function _runFieldImpactScan(fieldApiName, qualifiedName) {
-    const escapedField = fieldApiName.replace(/'/g, "\\'");
+    const escapedField = fieldApiName.replace(/'/g, "''");
 
     // Strip namespace prefix for broader matching (e.g., Apttus_Config2__FieldName__c → FieldName__c)
     const shortName = fieldApiName.replace(/^\w+__/, '');
-    const escapedShort = shortName.replace(/'/g, "\\'");
+    const escapedShort = shortName.replace(/'/g, "''");
     const useShort = shortName !== fieldApiName;
 
     // Build LIKE clause — search both full name and short name for managed package fields
@@ -1080,12 +1175,33 @@ const InspectorPanel = (() => {
       })));
     }
 
-    if (totalRefs === 0) {
+    if (totalRefs === 0 && (!results.errors || results.errors.length === 0)) {
       html = `
         <div style="text-align:center;padding:28px 16px;color:#6e7681">
           <div style="width:36px;height:36px;margin:0 auto 10px !important;color:#22c55e;opacity:0.7">${I.check}</div>
           <div style="font-size:13px;color:#22c55e;font-weight:600;margin-bottom:4px">No References Found</div>
           <div style="font-size:11px;line-height:1.5">This field is not referenced in any<br>Apex classes, triggers, or validation rules.</div>
+        </div>
+      `;
+    } else if (totalRefs === 0 && results.errors && results.errors.length > 0) {
+      // Queries failed — show errors prominently instead of hiding them
+      html = errorBanner + `
+        <div style="text-align:center;padding:20px 16px;color:#6e7681">
+          <div style="font-size:12px;line-height:1.5">Could not complete analysis.<br>Check the errors above and try again.</div>
+        </div>
+      `;
+    }
+
+    // Add truncation warning if any category hit the LIMIT
+    const truncated = [];
+    if (results.apexClasses.length >= 50) truncated.push('Apex Classes');
+    if (results.apexTriggers.length >= 50) truncated.push('Apex Triggers');
+    if (results.validationRules.length >= 50) truncated.push('Validation Rules');
+    if (results.workflows.length >= 50) truncated.push('Workflow Updates');
+    if (truncated.length > 0) {
+      html += `
+        <div style="margin-top:8px;padding:6px 10px;background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.2);border-radius:6px;font-size:11px;color:#d2992a">
+          Results may be incomplete — ${truncated.join(', ')} hit the 50-result limit.
         </div>
       `;
     }

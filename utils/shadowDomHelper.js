@@ -1436,6 +1436,57 @@ mark.sfdt-highlight {
   font-size: 12px !important;
   outline: none !important;
 }
+.sfdt-inline-select {
+  cursor: pointer;
+  appearance: auto;
+  min-width: 120px;
+}
+
+/* ─── Toggle Switch ─── */
+.sfdt-toggle-wrap { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.sfdt-toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: #383e4a;
+  position: relative;
+  transition: background 0.2s;
+}
+.sfdt-toggle-on .sfdt-toggle-track { background: #22c55e; }
+.sfdt-toggle-thumb {
+  position: absolute;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e1e4e8;
+  transition: left 0.2s;
+}
+.sfdt-toggle-on .sfdt-toggle-thumb { left: 16px; }
+.sfdt-toggle-label { font-size: 11px; color: #8b949e; }
+.sfdt-toggle-on .sfdt-toggle-label { color: #22c55e; }
+.sfdt-toggle-off .sfdt-toggle-label { color: #f85149; }
+
+/* ─── Edit Hint & Save Feedback ─── */
+.sfdt-edit-hint {
+  display: none;
+  font-size: 10px;
+  color: var(--fg3, #6e7681);
+  margin-left: 4px;
+  opacity: 0.5;
+}
+.sfdt-field-row:hover .sfdt-edit-hint { display: inline; }
+.sfdt-readonly-field { cursor: default; }
+.sfdt-lock-icon { display: none; font-size: 10px; margin-left: 4px; opacity: 0.4; }
+.sfdt-field-row:hover .sfdt-lock-icon { display: inline; }
+.sfdt-saving { color: #d2992a; font-size: 11px; font-style: italic; }
+.sfdt-save-success { animation: sfdt-flash-green 1.2s ease-out; }
+@keyframes sfdt-flash-green {
+  0% { background: rgba(34,197,94,0.25); }
+  100% { background: transparent; }
+}
 
 /* ─── JSON Overlay ─── */
 
