@@ -30,6 +30,8 @@ const DependencyPanel = (() => {
   let _zoom = 1;
   let _dragging = false;
   let _dragStartX = 0, _dragStartY = 0;
+  let _dragMoved = false;
+  let _resizeObserver = null;
   let _animFrame = null;
 
   // Cache
@@ -402,9 +404,14 @@ const DependencyPanel = (() => {
     _canvas.addEventListener('mousemove', _onMouseMove);
     _canvas.addEventListener('mouseup', _onMouseUp);
     _canvas.addEventListener('dblclick', _onDblClick);
-    _canvas.addEventListener('click', _onClick);
 
-    window.addEventListener('resize', _resizeCanvas);
+    // Watch for panel resize (drag-to-resize or window resize)
+    if (_resizeObserver) _resizeObserver.disconnect();
+    _resizeObserver = new ResizeObserver(() => {
+      if (_animFrame) cancelAnimationFrame(_animFrame);
+      _animFrame = requestAnimationFrame(() => _resizeCanvas());
+    });
+    _resizeObserver.observe(_canvas.parentElement);
   }
 
   function _resizeCanvas() {
@@ -469,10 +476,21 @@ const DependencyPanel = (() => {
       const isSelected = node.id === _selectedNodeId;
       const isExpanded = _expandedNodes.has(node.id);
 
+      // Selected glow
+      if (isSelected) {
+        _ctx.beginPath();
+        _ctx.arc(node.x, node.y, node.radius + 6, 0, Math.PI * 2);
+        _ctx.fillStyle = 'rgba(88,166,255,0.15)';
+        _ctx.fill();
+        _ctx.strokeStyle = '#58a6ff';
+        _ctx.lineWidth = 2;
+        _ctx.stroke();
+      }
+
       // Node circle
       _ctx.beginPath();
       _ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      _ctx.fillStyle = node.isCenter ? '#1a1f2e' : 'rgba(15,20,25,0.9)';
+      _ctx.fillStyle = node.isCenter ? '#1a1f2e' : isSelected ? '#1a2540' : 'rgba(15,20,25,0.9)';
       _ctx.fill();
       _ctx.strokeStyle = isSelected ? '#ffffff' : color;
       _ctx.lineWidth = isSelected ? 3 : node.isCenter ? 2.5 : 1.5;
@@ -552,16 +570,25 @@ const DependencyPanel = (() => {
 
   function _onMouseDown(e) {
     _dragging = true;
+    _dragMoved = false;
     _dragStartX = e.clientX - _panX;
     _dragStartY = e.clientY - _panY;
-    _canvas.style.cursor = 'grabbing';
   }
 
   function _onMouseMove(e) {
     if (_dragging) {
+      const dx = e.clientX - _panX - _dragStartX + _panX;
+      const dy = e.clientY - _panY - _dragStartY + _panY;
+      // Only count as drag if moved more than 3px (prevents accidental drag on click)
+      if (Math.abs(e.clientX - (_dragStartX + _panX)) > 3 || Math.abs(e.clientY - (_dragStartY + _panY)) > 3) {
+        _dragMoved = true;
+      }
       _panX = e.clientX - _dragStartX;
       _panY = e.clientY - _dragStartY;
-      _render();
+      if (_dragMoved) {
+        _canvas.style.cursor = 'grabbing';
+        _render();
+      }
     } else {
       const rect = _canvas.getBoundingClientRect();
       const n = _nodeAt(e.clientX - rect.left, e.clientY - rect.top);
@@ -569,33 +596,51 @@ const DependencyPanel = (() => {
     }
   }
 
-  function _onMouseUp() {
+  function _onMouseUp(e) {
+    const wasDrag = _dragMoved;
     _dragging = false;
+    _dragMoved = false;
     _canvas.style.cursor = 'grab';
-  }
 
-  function _onClick(e) {
-    const rect = _canvas.getBoundingClientRect();
-    const n = _nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    _selectedNodeId = n ? n.id : null;
-    _renderDetailPanel(n);
-    _render();
+    // If it was a click (not a drag), handle node selection
+    if (!wasDrag) {
+      const rect = _canvas.getBoundingClientRect();
+      const n = _nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+      _selectedNodeId = n ? n.id : null;
+      _renderDetailPanel(n);
+      _render();
+    }
   }
 
   async function _onDblClick(e) {
     const rect = _canvas.getBoundingClientRect();
     const n = _nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    if (!n || n.isCenter || _expandedNodes.has(n.id)) return;
+    if (!n || _expandedNodes.has(n.id)) return;
 
-    // Expand 2nd hop
+    // Expand this node's dependencies
     _expandedNodes.add(n.id);
-    _showLoading('Expanding...');
+    _showLoading('Expanding ' + (n.label || '') + '...');
 
     try {
-      const deps = await _fetchDependencies(n.id, _direction);
-      _addToGraph(n, deps);
-      _layoutRadial();
-      _render();
+      // Try MetadataComponentDependency first
+      let deps = await _fetchDependencies(n.id, _direction);
+      let total = (deps.inbound || []).length + (deps.outbound || []).length;
+
+      // If 0 results and it's an Apex class, try SOSL fallback to find what fields it references
+      if (total === 0 && (n.type === 'ApexClass' || n.type === 'ApexTrigger') && n.label) {
+        // For Apex nodes, we can't easily scan "what does this class reference" via SOSL
+        // But we can show a message
+        _hideLoading();
+        _renderDetailPanel(n);
+        return;
+      }
+
+      if (total > 0) {
+        _addToGraph(n, deps);
+        _layoutRadial();
+        _render();
+      }
+      _renderDetailPanel(n);
     } catch (err) {
       window._sfdtLogger.debug('[SFDT] Expand error:', err);
     }
