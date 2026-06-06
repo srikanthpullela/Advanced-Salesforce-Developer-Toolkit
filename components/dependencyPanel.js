@@ -375,23 +375,64 @@ const DependencyPanel = (() => {
     center.x = 0;
     center.y = 0;
 
-    // Group non-center nodes by type
+    // Group non-center nodes by type, only visible ones
     const others = _nodes.filter(n => !n.isCenter && _activeFilters.has(n.type));
     if (others.length === 0) return;
 
     // Sort by type for visual grouping
     others.sort((a, b) => (a.type || '').localeCompare(b.type || ''));
 
-    const baseRadius = Math.max(160, others.length * 12);
-    const angleStep = (2 * Math.PI) / others.length;
+    // Multi-ring layout: distribute nodes across rings to keep things readable
+    // Each ring holds at most `nodesPerRing` nodes
+    const nodesPerRing = Math.max(12, Math.min(30, Math.ceil(Math.sqrt(others.length) * 2)));
+    const ringGap = 80; // px between rings
+    const firstRingRadius = 140;
 
-    others.forEach((node, i) => {
-      const angle = angleStep * i - Math.PI / 2;
-      // Add slight jitter per type group to prevent overlap
-      const r = baseRadius + (node.deps > 3 ? 20 : 0);
-      node.x = Math.cos(angle) * r;
-      node.y = Math.sin(angle) * r;
+    let nodeIdx = 0;
+    let ring = 0;
+    while (nodeIdx < others.length) {
+      const ringRadius = firstRingRadius + ring * ringGap;
+      // More nodes fit on larger rings
+      const capacity = ring === 0 ? nodesPerRing : Math.floor(nodesPerRing * (1 + ring * 0.5));
+      const nodesInThisRing = Math.min(capacity, others.length - nodeIdx);
+      const angleStep = (2 * Math.PI) / nodesInThisRing;
+
+      for (let i = 0; i < nodesInThisRing; i++) {
+        const node = others[nodeIdx];
+        const angle = angleStep * i - Math.PI / 2 + (ring * 0.3); // offset each ring slightly
+        node.x = Math.cos(angle) * ringRadius;
+        node.y = Math.sin(angle) * ringRadius;
+        nodeIdx++;
+      }
+      ring++;
+    }
+  }
+
+  function _fitToView() {
+    if (!_canvas || _nodes.length === 0) return;
+    const w = _canvas.width / window.devicePixelRatio;
+    const h = _canvas.height / window.devicePixelRatio;
+
+    // Find bounding box of all visible nodes
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    _nodes.forEach(n => {
+      if (!n.isCenter && !_activeFilters.has(n.type)) return;
+      minX = Math.min(minX, n.x - n.radius);
+      maxX = Math.max(maxX, n.x + n.radius);
+      minY = Math.min(minY, n.y - n.radius - 15);
+      maxY = Math.max(maxY, n.y + n.radius + 15);
     });
+
+    if (!isFinite(minX)) return;
+
+    const graphW = maxX - minX + 40;
+    const graphH = maxY - minY + 40;
+
+    _zoom = Math.min(1.5, Math.min((w - 20) / graphW, (h - 20) / graphH));
+    _zoom = Math.max(0.1, _zoom);
+    _panX = -(minX + maxX) / 2 * _zoom;
+    _panY = -(minY + maxY) / 2 * _zoom;
+    _render();
   }
 
   // ─── Layer 4: Canvas Renderer ─────────────────────────
@@ -958,6 +999,8 @@ const DependencyPanel = (() => {
       _buildGraph(resolved, deps);
       _updateFilters();
       _render();
+      // Auto-fit graph to view after a short delay for canvas to stabilize
+      setTimeout(() => _fitToView(), 50);
 
       const detail = _container.querySelector('#dep-detail');
       if (detail) {
@@ -1025,6 +1068,12 @@ const DependencyPanel = (() => {
         <div class="sfdt-dep-canvas-wrap">
           <canvas id="dep-canvas"></canvas>
           <div id="dep-loading" class="sfdt-dep-loading">Loading...</div>
+          <div class="sfdt-dep-zoom-controls">
+            <button class="sfdt-btn sfdt-btn-sm sfdt-dep-zoom-btn" id="dep-zoom-in" title="Zoom in">+</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-dep-zoom-btn" id="dep-zoom-out" title="Zoom out">−</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-dep-zoom-btn" id="dep-zoom-fit" title="Fit to view">⊡</button>
+            <button class="sfdt-btn sfdt-btn-sm sfdt-dep-zoom-btn" id="dep-zoom-reset" title="Reset zoom">1:1</button>
+          </div>
         </div>
 
         <div id="dep-detail" class="sfdt-dep-detail">
@@ -1055,6 +1104,21 @@ const DependencyPanel = (() => {
     });
 
     _setupDirectionToggle();
+
+    // Zoom controls
+    container.querySelector('#dep-zoom-in').addEventListener('click', () => {
+      _zoom = Math.min(4, _zoom * 1.3);
+      _render();
+    });
+    container.querySelector('#dep-zoom-out').addEventListener('click', () => {
+      _zoom = Math.max(0.05, _zoom * 0.7);
+      _render();
+    });
+    container.querySelector('#dep-zoom-fit').addEventListener('click', () => _fitToView());
+    container.querySelector('#dep-zoom-reset').addEventListener('click', () => {
+      _zoom = 1; _panX = 0; _panY = 0;
+      _render();
+    });
 
     SHADOW().initPanelResize(_panel, 'left', 'sfdt_dep_width');
   }

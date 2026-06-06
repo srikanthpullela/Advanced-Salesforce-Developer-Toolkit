@@ -2068,6 +2068,37 @@ mark.sfdt-highlight {
   border: 1px solid var(--border, #2d333b) !important;
   z-index: 10 !important;
 }
+.sfdt-dep-zoom-controls {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  z-index: 5 !important;
+}
+.sfdt-dep-zoom-btn {
+  width: 30px !important;
+  height: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  background: var(--bg2, #1a1f2e) !important;
+  border: 1px solid var(--border, #2d333b) !important;
+  color: var(--fg, #e1e4e8) !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.12s !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+}
+.sfdt-dep-zoom-btn:hover {
+  background: var(--bg3, #141925) !important;
+  border-color: var(--accent, #58a6ff) !important;
+  color: var(--accent, #58a6ff) !important;
+}
 .sfdt-btn-xs {
   font-size: 10px !important;
   padding: 2px 8px !important;
