@@ -26,6 +26,7 @@ const InspectorPanel = (() => {
   let _pendingLayoutAdds = new Set();    // fields to add to layout
   let _pendingLayoutRemoves = new Set(); // fields to remove from layout
   let _isSavingLayout = false;
+  let _depCounts = {};                   // field → dependency count from MetadataComponentDependency
 
   function _create() {
     if (_container) return;
@@ -430,6 +431,15 @@ const InspectorPanel = (() => {
 
       _renderFields();
       _updateFooter();
+
+      // Fetch dependency counts in background (non-blocking)
+      _depCounts = {};
+      if (window.SFDTDependencyPanel && window.SFDTDependencyPanel.fetchFieldDependencyCounts) {
+        window.SFDTDependencyPanel.fetchFieldDependencyCounts(_objectName).then(counts => {
+          _depCounts = counts || {};
+          _renderFields(); // Re-render to show badges
+        }).catch(() => { /* silently ignore */ });
+      }
     } catch (err) {
       window._sfdtLogger.debug('[SFDT] Inspector load error:', err, 'Object:', _objectName, 'Record:', _recordId);
       body.innerHTML = `<div class="sfdt-error">Error loading ${_esc(_objectName || 'record')}: ${_esc(err.message)}</div>`;
@@ -615,6 +625,16 @@ const InspectorPanel = (() => {
       });
     });
 
+    // Dependency badge clicks → open in graph
+    body.querySelectorAll('.sfdt-dep-badge').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.SFDTDependencyPanel) {
+          window.SFDTDependencyPanel.showForField(_objectName, btn.dataset.field);
+        }
+      });
+    });
+
     // Layout action buttons
     const saveLayoutBtn = body.querySelector('#insp-save-layout');
     if (saveLayoutBtn) {
@@ -704,6 +724,14 @@ const InspectorPanel = (() => {
       `;
     }
 
+    // Dependency count badge
+    const depCount = _depCounts[field.name] || 0;
+    let depBadge = '';
+    if (depCount > 0) {
+      const badgeClass = depCount > 15 ? 'sfdt-dep-badge-high' : depCount > 5 ? 'sfdt-dep-badge-med' : 'sfdt-dep-badge-low';
+      depBadge = `<span class="sfdt-dep-badge ${badgeClass}" data-field="${_esc(field.name)}" data-label="${_esc(field.label)}" title="${depCount} dependencies — click to view">${depCount}</span>`;
+    }
+
     return `
       <tr class="sfdt-field-row ${field.custom ? 'sfdt-custom-field' : ''} ${rowDiffClass}">
         <td class="sfdt-td-layout" style="width:28px;padding:2px 4px;text-align:center">
@@ -713,6 +741,7 @@ const InspectorPanel = (() => {
         <td class="sfdt-td-api">
           <span class="sfdt-copyable" data-copy="${_esc(field.name)}">${_esc(field.name)}</span>
           ${isRelation ? '<span class="sfdt-relation" title="Relationship">&#8594;</span>' : ''}
+          ${depBadge}
           <button class="sfdt-impact-btn" data-field="${_esc(field.name)}" data-label="${_esc(field.label)}" title="Field Impact Analysis">${ICONS().impact}</button>
         </td>
         <td class="sfdt-td-value ${_compareRecord && rowDiffClass ? 'sfdt-diff-highlight-a' : ''}">
@@ -1009,6 +1038,7 @@ const InspectorPanel = (() => {
               <span style="font-family:var(--sfdt-mono,monospace);font-size:10px">${_esc(qualifiedName)}</span>
             </div>
           </div>
+          <button class="sfdt-btn sfdt-btn-sm" id="sfdt-impact-graph-btn" style="flex-shrink:0;font-size:10px" title="View in Dependency Graph">${I.graph} Graph</button>
           <button class="sfdt-btn sfdt-btn-sm sfdt-btn-close" style="flex-shrink:0">${I.x}</button>
         </div>
         <div class="sfdt-impact-body" style="padding:16px;max-height:60vh;overflow-y:auto">
@@ -1019,6 +1049,12 @@ const InspectorPanel = (() => {
 
     _container.appendChild(overlay);
     overlay.querySelector('.sfdt-btn-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#sfdt-impact-graph-btn').addEventListener('click', () => {
+      overlay.remove();
+      if (window.SFDTDependencyPanel) {
+        window.SFDTDependencyPanel.showForField(_objectName, fieldApiName);
+      }
+    });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
     const body = overlay.querySelector('.sfdt-impact-body');

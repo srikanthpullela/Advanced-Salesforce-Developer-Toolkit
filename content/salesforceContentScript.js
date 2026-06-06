@@ -36,6 +36,7 @@
   const SOQL = window.SFDTSOQLPanel;
   const DEBUGLOG = window.SFDTDebugLogPanel;
   const EXECANON = window.SFDTExecuteAnonymousPanel;
+  const DEPGRAPH = window.SFDTDependencyPanel;
   const TELEMETRY = window.SFDTTelemetryService;
 
   // ─── Register listeners IMMEDIATELY (before session connect) ─────
@@ -156,6 +157,11 @@
       EXECANON.toggle();
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'G') {
+      e.preventDefault(); e.stopPropagation();
+      DEPGRAPH.toggle();
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       let closed = false;
@@ -165,6 +171,7 @@
       if (INSPECTOR.isVisible()) { INSPECTOR.hide(); closed = true; }
       if (DEBUGLOG.isVisible()) { DEBUGLOG.hide(); closed = true; }
       if (EXECANON.isVisible()) { EXECANON.hide(); closed = true; }
+      if (DEPGRAPH.isVisible()) { DEPGRAPH.hide(); closed = true; }
       // Also collapse the toolbar
       const toolbarContainer = SHADOW.getOrCreate('toolbar').container;
       const toolbar = toolbarContainer.querySelector('#sfdt-toolbar');
@@ -274,6 +281,10 @@
             ${ICONS.code}
             <span class="sfdt-toolbar-label">Execute</span>
           </button>
+          <button class="sfdt-toolbar-btn" data-action="depgraph" title="Dependency Graph (Ctrl+Shift+G)">
+            ${ICONS.graph}
+            <span class="sfdt-toolbar-label">Deps</span>
+          </button>
           <button class="sfdt-toolbar-btn sfdt-toolbar-btn-secondary" data-action="refresh-cache" title="Refresh Cache">
             ${ICONS.refresh}
           </button>
@@ -305,6 +316,7 @@
           case 'navigator': NAVIGATOR.toggle(); break;
           case 'debuglog': DEBUGLOG.toggle(); break;
           case 'execanon': EXECANON.toggle(); break;
+          case 'depgraph': DEPGRAPH.toggle(); break;
           case 'refresh-cache':
             META.invalidateCache();
             META.buildIndex();

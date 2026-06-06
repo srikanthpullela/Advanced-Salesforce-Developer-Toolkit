@@ -1967,6 +1967,131 @@ mark.sfdt-highlight {
   50% { opacity: 0.4; }
 }
 
+/* ─── Dependency Graph Panel ─── */
+
+.sfdt-dep-panel {
+  flex-direction: column;
+  min-width: 420px;
+  max-width: 60vw;
+}
+.sfdt-dep-panel .sfdt-input::placeholder { color: var(--fg3, #6e7681); }
+.sfdt-dep-panel .sfdt-input:focus { border-color: var(--accent, #58a6ff) !important; }
+.sfdt-btn-xs {
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--border, #2d333b);
+  color: var(--fg3, #6e7681);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.sfdt-btn-xs.active {
+  background: var(--accent, #58a6ff) !important;
+  color: #fff !important;
+  border-color: var(--accent, #58a6ff) !important;
+}
+.sfdt-btn-accent {
+  background: var(--accent, #58a6ff) !important;
+  color: #fff !important;
+  border: none !important;
+}
+.sfdt-dep-filter {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg3, #141925);
+  border: 1px solid var(--border, #2d333b);
+  color: var(--fg3, #6e7681);
+  cursor: pointer;
+  transition: all 0.12s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sfdt-dep-filter.active { font-weight: 600; }
+.sfdt-dep-filter-count {
+  font-size: 9px;
+  background: rgba(255,255,255,0.1);
+  padding: 0 4px;
+  border-radius: 6px;
+}
+.sfdt-dep-detail-empty {
+  color: var(--fg3, #6e7681);
+  font-size: 11px;
+  text-align: center;
+  padding: 12px;
+}
+.sfdt-dep-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.sfdt-dep-detail-type {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+.sfdt-dep-detail-center {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent, #58a6ff);
+  background: rgba(88,166,255,0.1);
+  padding: 1px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+.sfdt-dep-detail-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, #e1e4e8);
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+.sfdt-dep-detail-ns {
+  font-size: 10px;
+  color: var(--fg3, #6e7681);
+  margin-bottom: 4px;
+}
+.sfdt-dep-detail-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--fg2, #8b949e);
+  margin-bottom: 6px;
+}
+.sfdt-dep-detail-link {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent, #58a6ff);
+  text-decoration: none;
+  margin-bottom: 6px;
+}
+.sfdt-dep-detail-link:hover { text-decoration: underline; }
+.sfdt-dep-expand-btn {
+  margin-top: 4px;
+  width: 100%;
+}
+.sfdt-dep-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.sfdt-dep-badge:hover { transform: scale(1.15); }
+.sfdt-dep-badge-low { background: rgba(88,166,255,0.15); color: #58a6ff; }
+.sfdt-dep-badge-med { background: rgba(249,115,22,0.15); color: #f97316; }
+.sfdt-dep-badge-high { background: rgba(248,81,73,0.15); color: #f85149; }
+
 /* ─── Floating Toolbar ─── */
 
 .sfdt-toolbar {

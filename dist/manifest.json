@@ -50,6 +50,7 @@
         "components/dataBuilderPanel.js",
         "components/debugLogPanel.js",
         "components/executeAnonymousPanel.js",
+        "components/dependencyPanel.js",
         "content/salesforceContentScript.js"
       ],
       "run_at": "document_idle"
