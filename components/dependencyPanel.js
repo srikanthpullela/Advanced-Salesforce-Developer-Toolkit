@@ -608,7 +608,7 @@ const DependencyPanel = (() => {
   function _onWheel(e) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    _zoom = Math.max(0.2, Math.min(4, _zoom * delta));
+    _zoom = Math.max(0.01, _zoom * delta);
     _render();
   }
 
@@ -1107,11 +1107,11 @@ const DependencyPanel = (() => {
 
     // Zoom controls
     container.querySelector('#dep-zoom-in').addEventListener('click', () => {
-      _zoom = Math.min(4, _zoom * 1.3);
+      _zoom = _zoom * 1.4;
       _render();
     });
     container.querySelector('#dep-zoom-out').addEventListener('click', () => {
-      _zoom = Math.max(0.05, _zoom * 0.7);
+      _zoom = Math.max(0.01, _zoom * 0.6);
       _render();
     });
     container.querySelector('#dep-zoom-fit').addEventListener('click', () => _fitToView());
