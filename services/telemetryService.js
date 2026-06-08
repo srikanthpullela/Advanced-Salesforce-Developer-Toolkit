@@ -19,8 +19,14 @@ const SFDTTelemetryService = (() => {
   // Replace with your Google Apps Script Web App URL after deployment
   const TELEMETRY_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzR0h1wEDvTAHSXDUA6GYk2qRltZCAOLyVh39INW-gKVhnng9Nl67iRcJvtuVI_t6sYfA/exec';
 
+  // Separate endpoint for feature usage analytics (set after deploying usage-tracking Apps Script)
+  const USAGE_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzR0h1wEDvTAHSXDUA6GYk2qRltZCAOLyVh39INW-gKVhnng9Nl67iRcJvtuVI_t6sYfA/exec';
+
   const STORAGE_KEY_PREFIX = 'sfdt_telemetry_sent_';
   const OPT_OUT_KEY = 'sfdt_telemetry_opt_out';
+  const USAGE_KEY = 'sfdt_feature_usage';
+  const USAGE_SENT_KEY = 'sfdt_usage_last_sent';
+  const USAGE_SEND_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
   /**
    * Record that this org is using the extension.
@@ -209,8 +215,125 @@ const SFDTTelemetryService = (() => {
     });
   }
 
+  // ── Feature Usage Tracking ──────────────────────────────
+
+  /**
+   * Track a feature usage event. Increments local counter.
+   * Events are batched and sent to Google Sheet every 24h.
+   *
+   * @param {string} feature - Feature name (e.g., 'search', 'inspector', 'soql')
+   * @param {string} [action] - Specific action (e.g., 'open', 'query', 'edit')
+   */
+  async function trackEvent(feature, action) {
+    try {
+      const optOut = await _getStorage(OPT_OUT_KEY);
+      if (optOut) return;
+
+      const orgId = API.getOrgId();
+      if (!orgId) return;
+
+      const usage = (await _getStorage(USAGE_KEY)) || {};
+      if (!usage[orgId]) usage[orgId] = {};
+
+      const key = action ? `${feature}.${action}` : feature;
+      usage[orgId][key] = (usage[orgId][key] || 0) + 1;
+
+      // Track daily active date
+      const today = new Date().toISOString().split('T')[0];
+      usage[orgId]._lastActive = today;
+      if (!usage[orgId]._firstSeen) usage[orgId]._firstSeen = today;
+
+      // Track session count (one per page load)
+      if (!usage[orgId]._sessionCounted) {
+        usage[orgId].sessions = (usage[orgId].sessions || 0) + 1;
+        usage[orgId]._sessionCounted = true;
+      }
+
+      await _setStorage(USAGE_KEY, usage);
+    } catch {
+      // Never break the extension
+    }
+  }
+
+  /**
+   * Flush accumulated usage data to Google Sheet.
+   * Called on extension load, only sends if 24h since last send.
+   */
+  async function flushUsage() {
+    try {
+      if (!USAGE_ENDPOINT) return;
+
+      const optOut = await _getStorage(OPT_OUT_KEY);
+      if (optOut) return;
+
+      // Check if enough time has passed since last send
+      const lastSent = await _getStorage(USAGE_SENT_KEY);
+      if (lastSent && (Date.now() - lastSent) < USAGE_SEND_INTERVAL) return;
+
+      const usage = (await _getStorage(USAGE_KEY)) || {};
+      if (Object.keys(usage).length === 0) return;
+
+      const orgId = API.getOrgId();
+      if (!orgId || !usage[orgId]) return;
+
+      const orgUsage = usage[orgId];
+
+      // Get extension version
+      let extVersion = '';
+      try { extVersion = chrome.runtime.getManifest().version || ''; } catch { /* ignore */ }
+
+      const payload = {
+        type: 'usage',
+        orgId: orgId,
+        extensionVersion: extVersion,
+        timestamp: new Date().toISOString(),
+        lastActive: orgUsage._lastActive || '',
+        firstSeen: orgUsage._firstSeen || '',
+        sessions: orgUsage.sessions || 0,
+        // Feature open counts
+        search_open: orgUsage['search.open'] || 0,
+        inspector_open: orgUsage['inspector.open'] || 0,
+        soql_open: orgUsage['soql.open'] || 0,
+        navigator_open: orgUsage['navigator.open'] || 0,
+        debuglog_open: orgUsage['debuglog.open'] || 0,
+        execanon_open: orgUsage['execanon.open'] || 0,
+        // Feature-specific actions
+        search_navigate: orgUsage['search.navigate'] || 0,
+        soql_run: orgUsage['soql.run'] || 0,
+        soql_export: orgUsage['soql.export'] || 0,
+        inspector_edit: orgUsage['inspector.edit'] || 0,
+        inspector_impact: orgUsage['inspector.impact'] || 0,
+        inspector_graph: orgUsage['inspector.graph'] || 0,
+        inspector_compare: orgUsage['inspector.compare'] || 0,
+        inspector_json: orgUsage['inspector.json'] || 0,
+        execanon_run: orgUsage['execanon.run'] || 0,
+        debuglog_view: orgUsage['debuglog.view'] || 0,
+        debuglog_analyze: orgUsage['debuglog.analyze'] || 0
+      };
+
+      // Send to Google Sheet
+      await fetch(USAGE_ENDPOINT, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+
+      // Reset counters for this org after sending
+      delete usage[orgId];
+      await _setStorage(USAGE_KEY, usage);
+      await _setStorage(USAGE_SENT_KEY, Date.now());
+
+      window._sfdtLogger.log('[SFDT] Usage data flushed.');
+    } catch (err) {
+      window._sfdtLogger.debug('[SFDT] Usage flush error:', err.message);
+    }
+  }
+
   return {
     recordInstall,
+    trackEvent,
+    flushUsage,
     optOut,
     optIn,
     isOptedOut

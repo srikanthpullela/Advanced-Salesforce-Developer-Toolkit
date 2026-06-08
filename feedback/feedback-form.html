@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Salesforce Developer Toolkit — Feedback</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1419;
+      color: #e1e4e8;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+    .container {
+      max-width: 640px;
+      width: 100%;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #58a6ff, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header p {
+      font-size: 14px;
+      color: #8b949e;
+      line-height: 1.5;
+    }
+    .header .anon {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 11px;
+      color: #22c55e;
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.2);
+      padding: 4px 12px;
+      border-radius: 12px;
+    }
+    .card {
+      background: #1a1f2e;
+      border: 1px solid #2d333b;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: #8b949e;
+      margin-bottom: 14px;
+    }
+    .required::after {
+      content: ' *';
+      color: #f85149;
+    }
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .option:hover {
+      background: rgba(88,166,255,0.05);
+      border-color: #2d333b;
+    }
+    .option input[type="radio"],
+    .option input[type="checkbox"] {
+      accent-color: #58a6ff;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .stars {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .star {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid #2d333b;
+      background: #141925;
+      color: #8b949e;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .star:hover, .star.active {
+      background: #58a6ff;
+      color: #fff;
+      border-color: #58a6ff;
+    }
+    .star-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #6e7681;
+      margin-top: 4px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      background: #141925;
+      border: 1px solid #2d333b;
+      border-radius: 8px;
+      color: #e1e4e8;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 12px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus {
+      border-color: #58a6ff;
+    }
+    textarea::placeholder {
+      color: #6e7681;
+    }
+    .submit-row {
+      text-align: center;
+      margin-top: 24px;
+    }
+    .submit-btn {
+      background: linear-gradient(135deg, #58a6ff, #818cf8);
+      color: #fff;
+      border: none;
+      padding: 12px 48px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .submit-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(88,166,255,0.3);
+    }
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .success {
+      display: none;
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .success h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #22c55e;
+    }
+    .success p {
+      color: #8b949e;
+      font-size: 14px;
+    }
+    .nps-row {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .nps-btn {
+      flex: 1;
+      height: 34px;
+      border-radius: 6px;
+      border: 1px solid #2d333b;
+      background: #141925;
+      color: #8b949e;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .nps-btn:hover, .nps-btn.active {
+      color: #fff;
+    }
+    .nps-btn[data-v="1"]:hover, .nps-btn[data-v="1"].active,
+    .nps-btn[data-v="2"]:hover, .nps-btn[data-v="2"].active,
+    .nps-btn[data-v="3"]:hover, .nps-btn[data-v="3"].active { background: #f85149; border-color: #f85149; }
+    .nps-btn[data-v="4"]:hover, .nps-btn[data-v="4"].active,
+    .nps-btn[data-v="5"]:hover, .nps-btn[data-v="5"].active,
+    .nps-btn[data-v="6"]:hover, .nps-btn[data-v="6"].active { background: #f97316; border-color: #f97316; }
+    .nps-btn[data-v="7"]:hover, .nps-btn[data-v="7"].active,
+    .nps-btn[data-v="8"]:hover, .nps-btn[data-v="8"].active { background: #fbbf24; border-color: #fbbf24; color: #0f1419; }
+    .nps-btn[data-v="9"]:hover, .nps-btn[data-v="9"].active,
+    .nps-btn[data-v="10"]:hover, .nps-btn[data-v="10"].active { background: #22c55e; border-color: #22c55e; }
+    @media (max-width: 480px) {
+      .options-grid { grid-template-columns: 1fr; }
+      .nps-row { flex-wrap: wrap; }
+      .nps-btn { min-width: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⚡ Advanced Salesforce Developer Toolkit</h1>
+      <p>Help us improve! This anonymous survey takes about 2 minutes.</p>
+      <span class="anon">🔒 100% Anonymous — No login required</span>
+    </div>
+
+    <form id="feedback-form">
+
+      <!-- Q1: Installed? -->
+      <div class="card">
+        <div class="card-title required">1. Have you installed the extension?</div>
+        <div class="card-sub">Chrome Web Store → Advanced Salesforce Developer Toolkit</div>
+        <div class="options">
+          <label class="option"><input type="radio" name="installed" value="active" required> Yes, actively using it</label>
+          <label class="option"><input type="radio" name="installed" value="tried_once"> Yes, tried it once</label>
+          <label class="option"><input type="radio" name="installed" value="installed_not_used"> Installed but haven't used yet</label>
+          <label class="option"><input type="radio" name="installed" value="no"> No, haven't installed</label>
+        </div>
+      </div>
+
+      <!-- Q2: Features used -->
+      <div class="card">
+        <div class="card-title">2. Which features have you used? (select all that apply)</div>
+        <div class="card-sub">Skip if you haven't used the extension yet</div>
+        <div class="options options-grid">
+          <label class="option"><input type="checkbox" name="features" value="search"> 🔍 Global Search</label>
+          <label class="option"><input type="checkbox" name="features" value="inspector"> 🔎 Record Inspector</label>
+          <label class="option"><input type="checkbox" name="features" value="soql"> 📝 SOQL Editor</label>
+          <label class="option"><input type="checkbox" name="features" value="navigator"> 🚀 Quick Navigator</label>
+          <label class="option"><input type="checkbox" name="features" value="debug"> 🐛 Debug Log Analyzer</label>
+          <label class="option"><input type="checkbox" name="features" value="execute"> ⚡ Execute Anonymous</label>
+        </div>
+      </div>
+
+      <!-- Q3: Most useful -->
+      <div class="card">
+        <div class="card-title">3. Which feature is MOST useful to you?</div>
+        <div class="card-sub">Pick the one you'd miss most if it was removed</div>
+        <div class="options">
+          <label class="option"><input type="radio" name="most_useful" value="search"> 🔍 Global Search</label>
+          <label class="option"><input type="radio" name="most_useful" value="inspector"> 🔎 Record Inspector</label>
+          <label class="option"><input type="radio" name="most_useful" value="soql"> 📝 SOQL Editor</label>
+          <label class="option"><input type="radio" name="most_useful" value="navigator"> 🚀 Quick Navigator</label>
+          <label class="option"><input type="radio" name="most_useful" value="debug"> 🐛 Debug Log Analyzer</label>
+          <label class="option"><input type="radio" name="most_useful" value="execute"> ⚡ Execute Anonymous</label>
+          <label class="option"><input type="radio" name="most_useful" value="other"> Other</label>
+        </div>
+      </div>
+
+      <!-- Q4: Time saved -->
+      <div class="card">
+        <div class="card-title">4. How much time does it save you per day?</div>
+        <div class="options">
+          <label class="option"><input type="radio" name="time_saved" value="not_using"> Not using it yet</label>
+          <label class="option"><input type="radio" name="time_saved" value="few_min"> A few minutes</label>
+          <label class="option"><input type="radio" name="time_saved" value="15_30"> 15–30 minutes</label>
+          <label class="option"><input type="radio" name="time_saved" value="30_60"> 30–60 minutes</label>
+          <label class="option"><input type="radio" name="time_saved" value="60_plus"> More than 1 hour</label>
+        </div>
+      </div>
+
+      <!-- Q5: Role -->
+      <div class="card">
+        <div class="card-title required">5. What's your role?</div>
+        <div class="options options-grid">
+          <label class="option"><input type="radio" name="role" value="developer" required> Developer</label>
+          <label class="option"><input type="radio" name="role" value="admin"> Admin</label>
+          <label class="option"><input type="radio" name="role" value="qa"> QA / Tester</label>
+          <label class="option"><input type="radio" name="role" value="architect"> Architect</label>
+          <label class="option"><input type="radio" name="role" value="manager"> Manager</label>
+          <label class="option"><input type="radio" name="role" value="other"> Other</label>
+        </div>
+      </div>
+
+      <!-- Q6: Rating -->
+      <div class="card">
+        <div class="card-title required">6. Rate the overall experience</div>
+        <div class="card-sub">1 = Poor, 5 = Excellent</div>
+        <div class="stars">
+          <button type="button" class="star" data-rating="1">1</button>
+          <button type="button" class="star" data-rating="2">2</button>
+          <button type="button" class="star" data-rating="3">3</button>
+          <button type="button" class="star" data-rating="4">4</button>
+          <button type="button" class="star" data-rating="5">5</button>
+        </div>
+        <div class="star-labels"><span>Poor</span><span>Excellent</span></div>
+        <input type="hidden" name="rating" id="rating-input" required>
+      </div>
+
+      <!-- Q7: Bugs -->
+      <div class="card">
+        <div class="card-title">7. Any issues or bugs you've encountered?</div>
+        <div class="card-sub">Describe what happened and which feature was involved</div>
+        <textarea name="bugs" placeholder="e.g. SOQL editor doesn't auto-complete custom fields on Account..."></textarea>
+      </div>
+
+      <!-- Q8: Feature requests -->
+      <div class="card">
+        <div class="card-title">8. What feature would you add or improve?</div>
+        <div class="card-sub">What's missing? What would make this a daily-use tool for you?</div>
+        <textarea name="feature_request" placeholder="e.g. Would love a deployment status monitor, or API limits dashboard..."></textarea>
+      </div>
+
+      <!-- Q9: NPS -->
+      <div class="card">
+        <div class="card-title required">9. How likely are you to recommend this to a colleague?</div>
+        <div class="card-sub">0 = Not at all, 10 = Absolutely</div>
+        <div class="nps-row">
+          <button type="button" class="nps-btn" data-v="1">1</button>
+          <button type="button" class="nps-btn" data-v="2">2</button>
+          <button type="button" class="nps-btn" data-v="3">3</button>
+          <button type="button" class="nps-btn" data-v="4">4</button>
+          <button type="button" class="nps-btn" data-v="5">5</button>
+          <button type="button" class="nps-btn" data-v="6">6</button>
+          <button type="button" class="nps-btn" data-v="7">7</button>
+          <button type="button" class="nps-btn" data-v="8">8</button>
+          <button type="button" class="nps-btn" data-v="9">9</button>
+          <button type="button" class="nps-btn" data-v="10">10</button>
+        </div>
+        <div class="star-labels"><span>Not likely</span><span>Definitely</span></div>
+        <input type="hidden" name="nps" id="nps-input" required>
+      </div>
+
+      <!-- Q10: Anything else -->
+      <div class="card">
+        <div class="card-title">10. Anything else you'd like to share?</div>
+        <textarea name="other_comments" placeholder="General thoughts, comparisons with other tools, suggestions..."></textarea>
+      </div>
+
+      <div class="submit-row">
+        <button type="submit" class="submit-btn">Submit Feedback</button>
+      </div>
+    </form>
+
+    <div class="success" id="success-msg">
+      <h2>✅ Thank you!</h2>
+      <p>Your feedback has been recorded. We'll use it to make the toolkit better.</p>
+    </div>
+  </div>
+
+  <script>
+    // Star rating
+    document.querySelectorAll('.star').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rating = btn.dataset.rating;
+        document.getElementById('rating-input').value = rating;
+        document.querySelectorAll('.star').forEach(s => {
+          s.classList.toggle('active', parseInt(s.dataset.rating) <= parseInt(rating));
+        });
+      });
+    });
+
+    // NPS
+    document.querySelectorAll('.nps-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.v;
+        document.getElementById('nps-input').value = v;
+        document.querySelectorAll('.nps-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Form submit
+    document.getElementById('feedback-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = new FormData(form);
+      const result = {};
+
+      // Single-value fields
+      ['installed', 'most_useful', 'time_saved', 'role', 'rating', 'nps'].forEach(key => {
+        result[key] = data.get(key) || '';
+      });
+
+      // Multi-value
+      result.features = data.getAll('features');
+
+      // Text fields
+      ['bugs', 'feature_request', 'other_comments'].forEach(key => {
+        result[key] = data.get(key) || '';
+      });
+
+      result.timestamp = new Date().toISOString();
+
+      // ─── INTEGRATION POINT ───
+      // Option 1: Google Sheets via Apps Script Web App
+      // Replace YOUR_GOOGLE_SCRIPT_URL with your deployed Apps Script URL
+      // fetch('YOUR_GOOGLE_SCRIPT_URL', {
+      //   method: 'POST',
+      //   mode: 'no-cors',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(result)
+      // });
+
+      // Option 2: Log to console (for testing)
+      console.log('Feedback submitted:', JSON.stringify(result, null, 2));
+
+      // Option 3: Download as JSON (offline collection)
+      const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `feedback_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      // Show success
+      form.style.display = 'none';
+      document.getElementById('success-msg').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

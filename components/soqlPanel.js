@@ -539,6 +539,7 @@ const SOQLPanel = (() => {
   async function _runQuery() {
     const soql = _editor.value.trim();
     if (!soql) return;
+    if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('soql', 'run');
     _queriedSObjectType = _extractSObjectType(soql);
 
     // Auto-detect Tooling API objects

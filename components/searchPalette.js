@@ -1270,6 +1270,7 @@ const SearchPalette = (() => {
   function _selectResult(index, newTab) {
     const result = _currentResults[index];
     if (!result) return;
+    if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('search', 'navigate');
 
     // Handle Lightning/Classic mode switch action
     if (result.type === 'ModeSwitch') {

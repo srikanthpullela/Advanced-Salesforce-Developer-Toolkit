@@ -108,6 +108,9 @@
     // Record anonymous telemetry (once per org, non-blocking)
     TELEMETRY.recordInstall();
 
+    // Flush accumulated usage data (every 24h)
+    TELEMETRY.flushUsage();
+
     // Start background indexing
     window._sfdtLogger.log('[SFDT] Starting metadata index build...');
     META.buildIndex().then(() => {
@@ -130,31 +133,37 @@
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'P') {
       e.preventDefault(); e.stopPropagation();
       PALETTE.toggle();
+      if (PALETTE.isVisible()) TELEMETRY.trackEvent('search', 'open');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'X') {
       e.preventDefault(); e.stopPropagation();
       INSPECTOR.toggle();
+      if (INSPECTOR.isVisible()) TELEMETRY.trackEvent('inspector', 'open');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'L') {
       e.preventDefault(); e.stopPropagation();
       SOQL.toggle();
+      if (SOQL.isVisible()) TELEMETRY.trackEvent('soql', 'open');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Y') {
       e.preventDefault(); e.stopPropagation();
       NAVIGATOR.toggle();
+      if (NAVIGATOR.isVisible()) TELEMETRY.trackEvent('navigator', 'open');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'K') {
       e.preventDefault(); e.stopPropagation();
       DEBUGLOG.toggle();
+      if (DEBUGLOG.isVisible()) TELEMETRY.trackEvent('debuglog', 'open');
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'E') {
       e.preventDefault(); e.stopPropagation();
       EXECANON.toggle();
+      if (EXECANON.isVisible()) TELEMETRY.trackEvent('execanon', 'open');
       return;
     }
 
@@ -302,12 +311,12 @@
       btn.addEventListener('click', () => {
         toolbar.classList.remove('expanded');
         switch (btn.dataset.action) {
-          case 'search': PALETTE.toggle(); break;
-          case 'inspector': INSPECTOR.toggle(); break;
-          case 'soql': SOQL.toggle(); break;
-          case 'navigator': NAVIGATOR.toggle(); break;
-          case 'debuglog': DEBUGLOG.toggle(); break;
-          case 'execanon': EXECANON.toggle(); break;
+          case 'search': PALETTE.toggle(); TELEMETRY.trackEvent('search', 'open'); break;
+          case 'inspector': INSPECTOR.toggle(); TELEMETRY.trackEvent('inspector', 'open'); break;
+          case 'soql': SOQL.toggle(); TELEMETRY.trackEvent('soql', 'open'); break;
+          case 'navigator': NAVIGATOR.toggle(); TELEMETRY.trackEvent('navigator', 'open'); break;
+          case 'debuglog': DEBUGLOG.toggle(); TELEMETRY.trackEvent('debuglog', 'open'); break;
+          case 'execanon': EXECANON.toggle(); TELEMETRY.trackEvent('execanon', 'open'); break;
 
           case 'refresh-cache':
             META.invalidateCache();

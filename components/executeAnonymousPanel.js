@@ -226,6 +226,7 @@ const ExecuteAnonymousPanel = (() => {
     const codeEl = _container.querySelector('#ea-code');
     const code = codeEl.value.trim();
     if (!code) return;
+    if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('execanon', 'run');
 
     const statusEl = _container.querySelector('#ea-status');
     const runBtn = _container.querySelector('#ea-run');

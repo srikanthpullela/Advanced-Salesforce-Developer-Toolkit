@@ -876,6 +876,7 @@ const InspectorPanel = (() => {
       el.innerHTML = '<span class="sfdt-saving">Saving...</span>';
       await API().restPatch(_objectName, _recordId, { [fieldName]: newValue });
       _currentRecord[fieldName] = newValue;
+      if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('inspector', 'edit');
       _renderFields();
       // Brief success flash
       setTimeout(() => {
@@ -1016,6 +1017,7 @@ const InspectorPanel = (() => {
   // ─── Field Impact Analysis ────────────────────────────
 
   async function _showFieldImpact(fieldApiName, fieldLabel) {
+    if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('inspector', 'impact');
     const I = ICONS();
     const qualifiedName = `${_objectName}.${fieldApiName}`;
 
@@ -1051,6 +1053,7 @@ const InspectorPanel = (() => {
     overlay.querySelector('.sfdt-btn-close').addEventListener('click', () => overlay.remove());
     overlay.querySelector('#sfdt-impact-graph-btn').addEventListener('click', () => {
       overlay.remove();
+      if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('inspector', 'graph');
       if (window.SFDTDependencyPanel) {
         window.SFDTDependencyPanel.showForField(_objectName, fieldApiName);
       }
