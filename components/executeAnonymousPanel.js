@@ -6,6 +6,7 @@ const ExecuteAnonymousPanel = (() => {
   const API = () => window.SalesforceAPI;
   const SHADOW = () => window.SFDTShadowHelper;
   const ICONS = () => window.SFDTIcons;
+  const _track = (action) => { try { if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('execanon', action); } catch {} };
 
   let _container = null;
   let _panel = null;
@@ -223,10 +224,10 @@ const ExecuteAnonymousPanel = (() => {
   }
 
   async function _execute() {
+    _track('run');
     const codeEl = _container.querySelector('#ea-code');
     const code = codeEl.value.trim();
     if (!code) return;
-    if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('execanon', 'run');
 
     const statusEl = _container.querySelector('#ea-status');
     const runBtn = _container.querySelector('#ea-run');

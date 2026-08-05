@@ -7,7 +7,7 @@ const MetadataService = (() => {
   const API = window.SalesforceAPI;
 
   const CACHE_VERSION_KEY = 'sfdt_cache_version';
-  const CURRENT_CACHE_VERSION = '6'; // Increment when query logic changes
+  const CURRENT_CACHE_VERSION = '8'; // Increment when query logic changes
 
   let _indexing = false;
   let _indexReady = false;
@@ -224,8 +224,76 @@ const MetadataService = (() => {
         createable: o.createable,
         updateable: o.updateable
       }));
+
+    // Enrich custom objects with their EntityDefinition DurableId — the 01I…-prefixed
+    // object definition Id. Classic Setup links to a custom object detail page via
+    // /{01I…}?setupid=CustomObjects; the record key prefix (e.g. a1I) is NOT a valid
+    // navigation target on its own, so without this the link 404s / lands on the wrong page.
+    try {
+      const customNames = objects.filter(o => o.custom).map(o => o.name);
+      const durableIds = await _fetchEntityDurableIds(customNames);
+      objects.forEach(o => {
+        if (o.custom && durableIds[o.name]) o.durableId = durableIds[o.name];
+      });
+    } catch (e) {
+      window._sfdtLogger.debug('[SFDT] Custom object DurableId enrichment failed:', e);
+    }
+
     CACHE.set('metadata', 'customObjects', objects);
     return objects;
+  }
+
+  /**
+   * Resolve EntityDefinition DurableIds (01I…-prefixed object definition Ids) for the
+   * given custom object API names, returned as a { QualifiedApiName: DurableId } map.
+   *
+   * Tooling queries run as GET requests, so the SOQL (with its IN (...) list) rides in
+   * the URL. Orgs with many long-named managed-package objects (e.g. Apttus/CPQ) easily
+   * exceed the ~2KB browser URL limit, which makes the request fail silently and leaves
+   * objects without a DurableId. So batches are sized by *encoded URL length*, not a
+   * fixed count, mirroring the EntityParticle field search in searchService.
+   */
+  async function _fetchEntityDurableIds(apiNames) {
+    const map = {};
+    if (!apiNames || !apiNames.length) return map;
+
+    const MAX_URL_LEN = 1800;
+    const base = (API.getInstanceUrl && API.getInstanceUrl()) || '';
+    const selectPrefix = 'SELECT DurableId, QualifiedApiName FROM EntityDefinition WHERE QualifiedApiName IN (';
+    const selectSuffix = ')';
+    // base URL + /services/data/vXX/tooling/query/?q= path + encoded static SOQL parts
+    const overhead = base.length + 60 + encodeURIComponent(selectPrefix + selectSuffix).length;
+
+    // Group names into batches whose full request URL stays under the limit.
+    const batches = [];
+    let cur = [];
+    let curLen = 0;
+    for (const name of apiNames) {
+      const encLen = encodeURIComponent(`'${String(name).replace(/'/g, "\\'")}',`).length;
+      if (cur.length > 0 && overhead + curLen + encLen > MAX_URL_LEN) {
+        batches.push(cur);
+        cur = [];
+        curLen = 0;
+      }
+      cur.push(name);
+      curLen += encLen;
+    }
+    if (cur.length) batches.push(cur);
+
+    // Batches are independent reads — run them in parallel.
+    await Promise.all(batches.map(async (batch) => {
+      const inClause = batch.map(n => `'${String(n).replace(/'/g, "\\'")}'`).join(',');
+      try {
+        const res = await API.toolingQuery(`${selectPrefix}${inClause}${selectSuffix}`);
+        (res.records || []).forEach(r => {
+          if (r.QualifiedApiName && r.DurableId) map[r.QualifiedApiName] = r.DurableId;
+        });
+      } catch (e) {
+        window._sfdtLogger.debug('[SFDT] EntityDefinition batch query failed:', e);
+      }
+    }));
+
+    return map;
   }
 
   async function fetchCustomFields(objectName) {
@@ -243,8 +311,6 @@ const MetadataService = (() => {
       scale: f.scale,
       nillable: f.nillable,
       unique: f.unique,
-      updateable: f.updateable,
-      autoNumber: f.autoNumber,
       externalId: f.externalId,
       referenceTo: f.referenceTo,
       relationshipName: f.relationshipName,
@@ -664,6 +730,7 @@ const MetadataService = (() => {
         icon: '🗂',
         custom: o.custom,
         keyPrefix: o.keyPrefix,
+        durableId: o.durableId,
         searchable: o.searchable,
         queryable: o.queryable
       }));
@@ -789,81 +856,164 @@ const MetadataService = (() => {
       // Development
       { name: 'Apex Classes', setupId: 'ApexClasses' },
       { name: 'Apex Triggers', setupId: 'ApexTriggers' },
+      { name: 'Apex Test Execution', setupId: 'ApexTestQueue' },
+      { name: 'Apex Jobs', setupId: 'AsyncApexJobs' },
+      { name: 'Apex Flex Queue', setupId: 'ApexFlexQueue' },
       { name: 'Visualforce Pages', setupId: 'ApexPages' },
       { name: 'Visualforce Components', setupId: 'ApexComponents' },
       { name: 'Lightning Components', setupId: 'LightningComponentBundles' },
+      { name: 'LWC Debug Mode', setupId: 'UserDebugModeSetup' },
       { name: 'Static Resources', setupId: 'StaticResources' },
       { name: 'Platform Events', setupId: 'EventObjects' },
+      { name: 'Change Data Capture', setupId: 'CdcObjectEnablement' },
+      { name: 'Platform Cache', setupId: 'PlatformCache' },
       { name: 'Custom Metadata Types', setupId: 'CustomMetadata' },
       { name: 'Custom Settings', setupId: 'CustomSettings' },
-      { name: 'Custom Labels', setupId: 'ExternalStrings' },
+      { name: 'Custom Labels', setupId: 'ExternalStrings', classicPath: '/101?retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DDevTools&setupid=ExternalStrings' },
       { name: 'Custom Permissions', setupId: 'CustomPermissions' },
+      { name: 'Email Services', setupId: 'EmailToApexFunction' },
+      { name: 'Dev Hub', setupId: 'DevHub' },
+      { name: 'DevOps Center', setupId: 'DevOpsCenterSetup' },
 
       // Automation
       { name: 'Flows', setupId: 'Flows' },
+      { name: 'Paused & Failed Flow Interviews', setupId: 'Pausedflows' },
       { name: 'Process Builder', setupId: 'ProcessAutomation' },
+      { name: 'Process Automation Settings', setupId: 'WorkflowSettings' },
       { name: 'Workflow Rules', setupId: 'WorkflowRules' },
+      { name: 'Workflow Email Alerts', setupId: 'WorkflowEmails' },
+      { name: 'Workflow Field Updates', setupId: 'WorkflowFieldUpdates' },
+      { name: 'Workflow Outbound Messages', setupId: 'WorkflowOutboundMessaging' },
       { name: 'Approval Processes', setupId: 'ApprovalProcesses' },
       { name: 'Scheduled Jobs', setupId: 'ScheduledJobs' },
-      { name: 'Apex Jobs', setupId: 'AsyncApexJobs' },
+      { name: 'Time-Based Workflow', setupId: 'DataManagementManageWorkflowQueue' },
 
       // Deployment & Packages
       { name: 'Deployment Status', setupId: 'DeployStatus' },
+      { name: 'Deployment Settings', setupId: 'DeploymentSettings' },
       { name: 'Installed Packages', setupId: 'ImportedPackage' },
+      { name: 'Package Manager', setupId: 'Package' },
       { name: 'Change Sets (Outbound)', setupId: 'OutboundChangeSet' },
       { name: 'Change Sets (Inbound)', setupId: 'InboundChangeSet' },
 
       // Security & Access
       { name: 'Profiles', setupId: 'EnhancedProfiles', classicPath: '/00e?setupid=EnhancedProfiles' },
-      { name: 'Permission Sets', setupId: 'PermSets' },
+      { name: 'Permission Sets', setupId: 'PermSets', classicPath: '/0PS?setupid=PermSets&retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DUsers' },
       { name: 'Permission Set Groups', setupId: 'PermSetGroups' },
       { name: 'Users', setupId: 'ManageUsers' },
       { name: 'Roles', setupId: 'Roles' },
+      { name: 'Public Groups', setupId: 'PublicGroups' },
+      { name: 'Queues', setupId: 'Queues' },
+      { name: 'Delegated Administration', setupId: 'DelegateGroups' },
+      { name: 'User Access Policies', setupId: 'UserAccessPolicies' },
       { name: 'Sharing Settings', setupId: 'SecuritySharing' },
+      { name: 'Field Accessibility', setupId: 'FieldAccessibility' },
+      { name: 'Password Policies', setupId: 'SecurityPolicies' },
+      { name: 'Session Settings', setupId: 'SecuritySession' },
+      { name: 'Network Access', setupId: 'NetworkAccess' },
+      { name: 'Health Check', setupId: 'HealthCheck' },
       { name: 'Login History', setupId: 'OrgLoginHistory' },
       { name: 'Session Management', setupId: 'SessionManagement' },
+      { name: 'Single Sign-On Settings', setupId: 'SingleSignOn' },
+      { name: 'Identity Provider', setupId: 'IdpPage' },
+      { name: 'Login Flows', setupId: 'LoginFlow' },
       { name: 'Auth Providers', setupId: 'AuthProvidersPage' },
       { name: 'Connected Apps', setupId: 'ConnectedApplication' },
+      { name: 'Connected Apps OAuth Usage', setupId: 'ConnectedAppsUsage' },
       { name: 'Named Credentials', setupId: 'NamedCredential' },
+      { name: 'External Credentials', setupId: 'ExternalCredential' },
       { name: 'Remote Site Settings', setupId: 'SecurityRemoteProxy' },
       { name: 'CORS', setupId: 'CorsWhitelistEntries' },
+      { name: 'CSP Trusted Sites', setupId: 'SecurityCspTrustedSite' },
       { name: 'Certificates & Key Management', setupId: 'CertificatesAndKeysManagement' },
+      { name: 'Transaction Security Policies', setupId: 'TransactionSecurityNew' },
+      { name: 'Event Log File Browser', setupId: 'ElfBrowser' },
+      { name: 'Event Monitoring Settings', setupId: 'EventMonitoringSetup' },
+      { name: 'MFA Assistant', setupId: 'MfaAssistant' },
 
       // Data & Integration
       { name: 'Object Manager', setupId: 'ObjectManager' },
-      { name: 'Data Loader', setupId: 'DataManagementDataLoader' },
-      { name: 'Storage Usage', setupId: 'CompanyResourceDisk' },
       { name: 'Schema Builder', setupId: 'SchemaBuilder' },
-      { name: 'API Usage', setupId: 'ApiUsageNotifications' },
+      { name: 'Picklist Value Sets', setupId: 'Picklists' },
+      { name: 'State & Country Picklists', setupId: 'AddressCleanerOverview' },
+      { name: 'Duplicate Rules', setupId: 'DuplicateRules' },
+      { name: 'Matching Rules', setupId: 'MatchingRules' },
+      { name: 'Data Import Wizard', setupId: 'DataManagementDataImporter' },
+      { name: 'Data Loader', setupId: 'DataManagementDataLoader' },
+      { name: 'Data Export', setupId: 'DataManagementExport' },
+      { name: 'Mass Delete Records', setupId: 'DataManagementDelete' },
+      { name: 'Mass Transfer Records', setupId: 'DataManagementTransfer' },
+      { name: 'Storage Usage', setupId: 'CompanyResourceDisk' },
+      { name: 'Big Objects', setupId: 'BigObjects' },
+      { name: 'External Services', setupId: 'ExternalServices' },
+      { name: 'External Data Sources', setupId: 'ExternalDataSource' },
+      { name: 'API Usage', setupId: 'MonitoringRateLimitingNotification' },
 
       // Email & Notifications
       { name: 'Email Templates', setupId: 'CommunicationTemplatesEmail' },
+      { name: 'Lightning Email Templates', setupId: 'LightningEmailTemplateSetup' },
       { name: 'Organization-Wide Addresses', setupId: 'OrgWideEmailAddresses' },
       { name: 'Email Deliverability', setupId: 'OrgEmailSettings' },
+      { name: 'Test Deliverability', setupId: 'TestEmailDeliverability' },
+      { name: 'DKIM Keys', setupId: 'EmailDKIMList' },
+      { name: 'Email to Salesforce', setupId: 'EmailToSalesforce' },
+      { name: 'Custom Notifications', setupId: 'CustomNotifications' },
 
       // UI & Navigation
-      { name: 'Tabs', setupId: 'Tabs' },
+      { name: 'Tabs', setupId: 'CustomTabs', path: '/lightning/setup/CustomTabs/home', classicPath: '/setup/ui/customtabs.jsp?setupid=CustomTabs&retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DDevTools' },
       { name: 'App Manager', setupId: 'NavigationMenus' },
       { name: 'Lightning App Builder', setupId: 'FlexiPageList' },
       { name: 'Page Layouts', setupId: 'PageLayouts' },
       { name: 'Record Types', setupId: 'RecordTypes' },
       { name: 'Global Actions', setupId: 'GlobalActions' },
+      { name: 'Path Settings', setupId: 'PathAssistantSetupHome' },
+      { name: 'In-App Guidance', setupId: 'Prompts' },
+      { name: 'Themes and Branding', setupId: 'ThemingAndBranding' },
+      { name: 'User Interface', setupId: 'UserInterface', path: '/lightning/setup/UserInterfaceUI/home', classicPath: '/ui/setup/org/UserInterfaceUI?setupid=UserInterface&retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DCustomize' },
+      { name: 'All Sites', setupId: 'SetupNetworks' },
 
       // Monitoring & Logs
-      { name: 'Debug Logs', setupId: 'ApexDebugLogs' },
+      { name: 'Debug Logs', setupId: 'ApexDebugLogs', classicPath: '/setup/ui/listApexTraces.apexp?retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DLogs&setupid=ApexDebugLogs' },
       { name: 'Email Logs', setupId: 'EmailLogFiles' },
       { name: 'Setup Audit Trail', setupId: 'SecurityEvents' },
+      { name: 'Bulk Data Load Jobs', setupId: 'AsyncApiJobStatus' },
+      { name: 'Outbound Messages Monitor', setupId: 'WorkflowOmStatus' },
+      { name: 'System Overview', setupId: 'SystemOverview' },
+
+      // Company Settings
+      { name: 'Company Information', setupId: 'CompanyProfileInfo' },
+      { name: 'Business Hours', setupId: 'BusinessHours' },
+      { name: 'Holidays', setupId: 'Holiday' },
+      { name: 'Manage Currencies', setupId: 'CompanyCurrency' },
+      { name: 'Release Updates', setupId: 'ReleaseUpdates' },
+      { name: 'Salesforce Optimizer', setupId: 'SalesforceOptimizer' },
+
+      // Reports & Dashboards
+      { name: 'Report Types', setupId: 'CustomReportTypeLightning' },
+      { name: 'Reporting Snapshots', setupId: 'AnalyticSnapshots' },
+
+      // Sales & Service
+      { name: 'Web-to-Lead', setupId: 'WebToLead' },
+      { name: 'Support Settings', setupId: 'CaseSettings' },
+      { name: 'Email-to-Case', setupId: 'EmailToCase' },
+      { name: 'Web-to-Case', setupId: 'CaseWebtocase' },
+      { name: 'Knowledge Settings', setupId: 'KnowledgeSettings' },
+      { name: 'Omni-Channel Settings', setupId: 'OmniChannelSettings' },
 
       // Tools
       { name: 'Developer Console', setupId: 'DeveloperConsole', path: '/_ui/common/apex/debug/ApexCSIPage', classicPath: '/_ui/common/apex/debug/ApexCSIPage' },
       { name: 'Rename Tabs and Labels', setupId: 'RenameTab' },
-      { name: 'Company Information', setupId: 'CompanyProfileInfo' },
       { name: 'My Domain', setupId: 'OrgDomain' },
       { name: 'Sandboxes', setupId: 'DataManagementCreateTestInstance' },
 
       // Personal
       { name: 'Personal Setup', setupId: 'PersonalSetup', path: '/lightning/settings/personal/PersonalInformation/home', classicPath: '/ui/setup/Setup?setupid=PersonalSetup' },
       { name: 'My Settings', setupId: 'PersonalSetup', path: '/lightning/settings/personal/PersonalInformation/home', classicPath: '/ui/setup/Setup?setupid=PersonalSetup' },
+      { name: 'Advanced User Details', setupId: 'AdvancedUserDetails', path: '/lightning/settings/personal/AdvancedUserDetails/home', classicPath: '/ui/setup/Setup?setupid=AdvancedUserDetails' },
+      { name: 'Change My Password', setupId: 'ChangePassword', path: '/lightning/settings/personal/ChangePassword/home', classicPath: '/ui/setup/Setup?setupid=ChangePassword' },
+      { name: 'Language & Time Zone', setupId: 'LanguageAndTimeZone', path: '/lightning/settings/personal/LanguageAndTimeZone/home', classicPath: '/ui/setup/Setup?setupid=LanguageAndTimeZone' },
+      { name: 'Reset My Security Token', setupId: 'ResetApiToken', path: '/lightning/settings/personal/ResetApiToken/home', classicPath: '/ui/setup/Setup?setupid=ResetApiToken' },
+      { name: 'Grant Account Login Access', setupId: 'GrantLoginAccess', path: '/lightning/settings/personal/GrantLoginAccess/home', classicPath: '/ui/setup/Setup?setupid=GrantLoginAccess' },
     ].map(s => ({
       name: s.name, type: 'SetupPage', icon: '\u2699', label: s.name,
       setupId: s.setupId,
@@ -893,15 +1043,32 @@ const MetadataService = (() => {
 
   // ─── Navigation URL Helpers ────────────────────────────
 
+  // Rewrite known-stale Salesforce URLs to their current equivalents.
+  // Old cached entries (recent items, search history, pins) may still hold
+  // retired paths — normalize them at navigation time so links never 404.
+  function normalizeUrl(url) {
+    if (!url) return url;
+    if (url.includes('/setup/ui/listTabs.apexp')) {
+      return url.replace(
+        '/setup/ui/listTabs.apexp',
+        '/setup/ui/customtabs.jsp?setupid=CustomTabs&retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DDevTools'
+      );
+    }
+    if (url.includes('/lightning/setup/Tabs/home')) {
+      return url.replace('/lightning/setup/Tabs/home', '/lightning/setup/CustomTabs/home');
+    }
+    return url;
+  }
+
   function getSetupUrl(item) {
     const base = API.getInstanceUrl();
     const lightning = base.includes('lightning.force.com') || document.querySelector('one-app-nav-bar');
     const isLightning = lightning || window.location.pathname.startsWith('/lightning');
 
-    if (isLightning) {
-      return _getLightningSetupUrl(base, item);
-    }
-    return _getClassicSetupUrl(base, item);
+    const url = isLightning
+      ? _getLightningSetupUrl(base, item)
+      : _getClassicSetupUrl(base, item);
+    return normalizeUrl(url);
   }
 
   function _getLightningSetupUrl(base, item) {
@@ -953,7 +1120,7 @@ const MetadataService = (() => {
           return `${base}${item.url}`;
         }
         if (item.sobjectName) return `${base}/lightning/o/${item.sobjectName}/home`;
-        return `${base}/lightning/setup/Tabs/home`;
+        return `${base}/lightning/setup/CustomTabs/home`;
       case 'Attribute':
         return `${base}/lightning/r/Apttus_Config2__ProductAttribute__c/${item.id}/view`;
       case 'SetupPage':
@@ -974,8 +1141,14 @@ const MetadataService = (() => {
       case 'Flow':
         return `${base}/flow/${item.devName || item.id}`;
       case 'CustomObject':
-        if (item.keyPrefix) return `${base}/${item.keyPrefix}?setupid=CustomObjects`;
-        return `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(item.name)}&setupid=ObjectManager`;
+        // Classic Setup opens a custom object's detail page via its 01I…-prefixed
+        // object definition Id (EntityDefinition.DurableId) — NOT the record key
+        // prefix (e.g. a1I), which is not a valid navigation target.
+        if (item.durableId) return `${base}/${item.durableId}?setupid=CustomObjects`;
+        // No DurableId resolved (e.g. stale cache): fall back to Object Manager's
+        // Details view, which routes by API name and works without the id. The old
+        // /p/setup/layout/LayoutFieldList target throws "Insufficient Privileges".
+        return `${base}/lightning/setup/ObjectManager/${encodeURIComponent(item.name)}/Details/view`;
       case 'CustomSetting':
         if (item.keyPrefix) return `${base}/setup/ui/listCustomSettingsData.apexp?id=${item.keyPrefix}`;
         return `${base}/p/setup/layout/LayoutFieldList?type=${encodeURIComponent(item.name)}&setupid=ObjectManager`;
@@ -1013,7 +1186,7 @@ const MetadataService = (() => {
           return `${base}${item.url}`;
         }
         if (item.sobjectName) return `${base}/${item.sobjectName}/o`;
-        return `${base}/setup/customize/tab/home`;
+        return `${base}/setup/ui/customtabs.jsp?setupid=CustomTabs&retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DDevTools`;
       case 'Attribute':
         return `${base}/${item.id}`;
       case 'SetupPage':
@@ -1053,7 +1226,8 @@ const MetadataService = (() => {
     isReady,
     onIndexReady,
     invalidateCache,
-    getSetupUrl
+    getSetupUrl,
+    normalizeUrl
   };
 })();
 

@@ -6,6 +6,7 @@ const NavigatorPanel = (() => {
   const SEARCH = () => window.SFDTSearchService;
   const SHADOW = () => window.SFDTShadowHelper;
   const ICONS = () => window.SFDTIcons;
+  const _track = (action) => { try { if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('navigator', action); } catch {} };
 
   let _container = null;
   let _visible = false;
@@ -97,7 +98,7 @@ const NavigatorPanel = (() => {
     { name: 'Reports', icon: 'chart', path: '/lightning/o/Report/home', classicPath: '/00O' },
     { name: 'Scheduled Jobs', icon: 'clock', path: '/lightning/setup/ScheduledJobs/home', classicPath: '/08e' },
     { name: 'Static Resources', icon: 'box', path: '/lightning/setup/StaticResources/home', classicPath: '/setup/build/listStaticResource.apexp' },
-    { name: 'Tabs', icon: 'layout', path: '/lightning/setup/Tabs/home', classicPath: '/setup/ui/listTabs.apexp' },
+    { name: 'Tabs', icon: 'layout', path: '/lightning/setup/CustomTabs/home', classicPath: '/setup/ui/customtabs.jsp?setupid=CustomTabs&retURL=%2Fui%2Fsetup%2FSetup%3Fsetupid%3DDevTools' },
     { name: 'Users', icon: 'user', path: '/lightning/setup/ManageUsers/home', classicPath: '/005' },
     { name: 'Visualforce Pages', icon: 'file', path: '/lightning/setup/ApexPages/home', classicPath: '/setup/build/listApexPage.apexp' }
   ];
@@ -470,11 +471,12 @@ const NavigatorPanel = (() => {
   function _selectDrilldownItem(index) {
     const item = _drilldownFilteredItems[index];
     if (!item) return;
+    _track('navigate');
 
     const url = META().getSetupUrl(item);
     if (url) {
       _addToRecent(item);
-      window.location.href = url;
+      window.location.href = META().normalizeUrl(url);
       hide();
     }
   }
@@ -530,7 +532,7 @@ const NavigatorPanel = (() => {
 
     if (url) {
       _addToRecent(result);
-      window.location.href = url;
+      window.location.href = META().normalizeUrl(url);
     }
     hide();
   }
@@ -540,6 +542,7 @@ const NavigatorPanel = (() => {
     _recentItems.unshift({
       name: item.name, type: item.type, icon: item.icon,
       id: item.id, path: item.path, label: item.label,
+      durableId: item.durableId,
       timestamp: Date.now()
     });
     if (_recentItems.length > MAX_RECENT) _recentItems.length = MAX_RECENT;

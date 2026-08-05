@@ -7,6 +7,7 @@ const DebugLogPanel = (() => {
   const API = () => window.SalesforceAPI;
   const SHADOW = () => window.SFDTShadowHelper;
   const ICONS = () => window.SFDTIcons;
+  const _track = (action) => { try { if (window.SFDTTelemetryService) window.SFDTTelemetryService.trackEvent('debuglog', action); } catch {} };
 
   let _container = null;
   let _panel = null;
@@ -33,6 +34,7 @@ const DebugLogPanel = (() => {
           </div>
           <div class="sfdt-panel-actions">
             <button class="sfdt-btn sfdt-btn-sm sfdt-btn-primary" id="dl-refresh" title="Refresh Logs">${I.refresh} Refresh</button>
+            <button class="sfdt-btn sfdt-btn-sm" id="dl-import" title="Import log file(s) from your computer">${I.upload} Import</button>
             <button class="sfdt-btn sfdt-btn-sm" id="dl-auto" title="Auto-refresh every 5s">${I.clock} Auto</button>
             <button class="sfdt-btn sfdt-btn-sm" id="dl-clear" title="Delete All Logs">${I.x} Clear</button>
             <button class="sfdt-btn sfdt-btn-sm" id="dl-toggle-size" title="Toggle Size">${I.maximize}</button>
@@ -79,15 +81,20 @@ const DebugLogPanel = (() => {
               </div>
             </div>
             <div class="sfdt-debuglog-detail-body" id="dl-detail-body">
-              <div style="padding:40px;text-align:center;color:#6e7681">
-                <div style="font-size:28px;margin-bottom:12px;opacity:0.4">${I.terminal}</div>
-                <div style="font-size:13px;font-weight:600;color:#e1e4e8;margin-bottom:6px">Debug Log Analyzer</div>
-                <div style="font-size:12px;color:#6e7681;line-height:1.6">Select a log from the list to analyze.<br>
-                Views: <b style="color:#e1e4e8">Raw</b> \u00B7 <b style="color:#f85149">Limits</b> \u00B7 <b style="color:#58a6ff">Summary</b> \u00B7 <b style="color:#f85149">Flame Chart</b> \u00B7 <b style="color:#22c55e">Call Tree</b> \u00B7 <b style="color:#fbbf24">Analysis</b> \u00B7 <b style="color:#c084fc">Database</b></div>
+              <div class="sfdt-dl-dropzone" id="dl-dropzone">
+                <div class="sfdt-dl-dropzone-inner" id="dl-dropzone-browse">
+                  <div class="sfdt-dl-dropzone-icon">${I.upload}</div>
+                  <div class="sfdt-dl-dropzone-title">Analyze a debug log</div>
+                  <div class="sfdt-dl-dropzone-hint"><b class="sfdt-dl-dropzone-link">Click to import</b> or drag &amp; drop a <code>.log</code> file here \u2014 or select one from the list on the left.</div>
+                  <div class="sfdt-dl-dropzone-views">
+                    <span>Raw</span><span>Limits</span><span>Summary</span><span>Flame Chart</span><span>Call Tree</span><span>Analysis</span><span>Database</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
+        <input type="file" id="dl-file-input" accept=".log,.txt,text/plain" multiple style="display:none" />
       </div>
     `;
 
@@ -117,58 +124,176 @@ const DebugLogPanel = (() => {
     _container.querySelector('#dl-tab-database').addEventListener('click', function() { _showTab('database'); });
     _container.querySelector('#dl-tab-raw').addEventListener('click', function() { _showTab('raw'); });
     _container.querySelector('#dl-download').addEventListener('click', _downloadLog);
+
+    // ── Import from computer + drag & drop ──
+    var fileInput = _container.querySelector('#dl-file-input');
+    fileInput.addEventListener('change', function(e) {
+      _importFiles(e.target.files);
+      e.target.value = '';
+    });
+    _container.querySelector('#dl-import').addEventListener('click', function() { fileInput.click(); });
+    var browseLink = _container.querySelector('#dl-dropzone-browse');
+    if (browseLink) browseLink.addEventListener('click', function() { fileInput.click(); });
+    _setupDragAndDrop();
+  }
+
+  // ─── Import / Drag & Drop ─────────────────────────────
+
+  let _importedLogs = {};       // id -> { id, name, raw, size, time }
+  let _importSeq = 0;
+  let _apiLogs = [];            // last fetched ApexLog records
+
+  function _setupDragAndDrop() {
+    var detail = _container.querySelector('#dl-detail');
+    if (!detail) return;
+    var depth = 0;
+    var stop = function(e) { e.preventDefault(); e.stopPropagation(); };
+
+    detail.addEventListener('dragenter', function(e) {
+      stop(e);
+      depth++;
+      detail.classList.add('sfdt-dl-dragover');
+    });
+    detail.addEventListener('dragover', function(e) {
+      stop(e);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+    detail.addEventListener('dragleave', function(e) {
+      stop(e);
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) detail.classList.remove('sfdt-dl-dragover');
+    });
+    detail.addEventListener('drop', function(e) {
+      stop(e);
+      depth = 0;
+      detail.classList.remove('sfdt-dl-dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        _importFiles(e.dataTransfer.files);
+      }
+    });
+  }
+
+  function _importFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    _track('import');
+
+    var pending = files.length;
+    var firstId = null;
+
+    files.forEach(function(file) {
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        var raw = ev.target.result || '';
+        var id = 'imported:' + (++_importSeq);
+        if (!firstId) firstId = id;
+        _importedLogs[id] = {
+          id: id,
+          name: file.name || ('Imported ' + _importSeq),
+          raw: raw,
+          size: file.size || raw.length,
+          time: file.lastModified ? new Date(file.lastModified) : new Date()
+        };
+        pending--;
+        if (pending === 0) {
+          _renderList();
+          if (firstId) _loadLogDetail(firstId);
+        }
+      };
+      reader.onerror = function() {
+        pending--;
+        if (pending === 0) _renderList();
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  function _importedItemHtml(imp) {
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var d = imp.time;
+    var time = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    return '<div class="sfdt-debuglog-item imported ' + (_currentLogId === imp.id ? 'active' : '') + '" data-id="' + imp.id + '">'
+      + '<div class="sfdt-debuglog-item-header">'
+      + '<span class="sfdt-debuglog-item-time">' + time + '</span>'
+      + '<span class="sfdt-debuglog-item-badge">FILE</span>'
+      + '</div>'
+      + '<div class="sfdt-debuglog-item-op" title="' + _esc(imp.name) + '">' + _esc(imp.name) + '</div>'
+      + '<div class="sfdt-debuglog-item-meta"><span style="color:#c084fc">Imported</span><span>' + _formatBytes(imp.size) + '</span></div>'
+      + '</div>';
   }
 
   // ─── Log List ─────────────────────────────────────────
 
   async function _loadLogs() {
     const listBody = _container.querySelector('#dl-list-body');
-    listBody.innerHTML = '<div class="sfdt-loading">Loading logs...</div>';
+    if (Object.keys(_importedLogs).length === 0) {
+      listBody.innerHTML = '<div class="sfdt-loading">Loading logs...</div>';
+    }
 
     try {
       const result = await API().getDebugLogs(50);
-      const logs = result.records || [];
-      _container.querySelector('#dl-count').textContent = `${logs.length} logs`;
-
-      if (logs.length === 0) {
-        listBody.innerHTML = '<div style="padding:16px;text-align:center;color:#6e7681;font-size:12px">'
-          + 'No debug logs found (ApexLog records).<br>'
-          + '<span style="font-size:11px;color:#383e4a;line-height:1.6">Trace flags exist but no Apex has been executed yet.<br>'
-          + 'Run some Apex code or trigger an action, then click <b style="color:#58a6ff">Refresh</b>.</span></div>';
-        return;
-      }
-
-      listBody.innerHTML = logs.map(log => {
-        const time = _formatLogTime(log.LastModifiedDate);
-        const duration = log.DurationMilliseconds;
-        const size = _formatBytes(log.LogLength);
-        const op = (log.Operation || '').replace(/^\//, '').substring(0, 35);
-        const userName = log.LogUser ? log.LogUser.Name : '';
-        const status = log.Status || '';
-        const isError = status.toLowerCase().includes('error') || status.toLowerCase().includes('fatal');
-        const durationColor = duration > 5000 ? '#f85149' : duration > 2000 ? '#fbbf24' : '#22c55e';
-
-        return `<div class="sfdt-debuglog-item ${_currentLogId === log.Id ? 'active' : ''} ${isError ? 'error' : ''}" data-id="${log.Id}">
-          <div class="sfdt-debuglog-item-header">
-            <span class="sfdt-debuglog-item-time">${time}</span>
-            <span class="sfdt-debuglog-item-duration" style="color:${durationColor}">${duration}ms</span>
-          </div>
-          <div class="sfdt-debuglog-item-op" title="${_esc(log.Operation || '')}">${_esc(op || 'Unknown')}</div>
-          <div class="sfdt-debuglog-item-meta">
-            ${userName ? `<span style="color:#c084fc">${_esc(userName)}</span>` : ''}
-            <span>${_esc(log.Request || '')}</span>
-            <span>${size}</span>
-            ${isError ? '<span style="color:#f85149">ERROR</span>' : ''}
-          </div>
-        </div>`;
-      }).join('');
-
-      listBody.querySelectorAll('.sfdt-debuglog-item').forEach(el => {
-        el.addEventListener('click', () => _loadLogDetail(el.dataset.id));
-      });
+      _apiLogs = result.records || [];
+      _renderList();
     } catch (err) {
-      listBody.innerHTML = `<div class="sfdt-error" style="padding:12px;font-size:12px">Error: ${_esc(err.message)}</div>`;
+      _apiLogs = [];
+      if (Object.keys(_importedLogs).length > 0) {
+        _renderList();
+      } else {
+        listBody.innerHTML = `<div class="sfdt-error" style="padding:12px;font-size:12px">Error: ${_esc(err.message)}</div>`;
+        _container.querySelector('#dl-count').textContent = '\u2014';
+      }
     }
+  }
+
+  function _renderList() {
+    const listBody = _container.querySelector('#dl-list-body');
+    const imported = Object.keys(_importedLogs).map(function(k) { return _importedLogs[k]; })
+      .sort(function(a, b) { return b.time - a.time; });
+    const logs = _apiLogs || [];
+
+    _container.querySelector('#dl-count').textContent =
+      (logs.length + imported.length) + ' log' + ((logs.length + imported.length) === 1 ? '' : 's');
+
+    if (logs.length === 0 && imported.length === 0) {
+      listBody.innerHTML = '<div style="padding:16px;text-align:center;color:#6e7681;font-size:12px">'
+        + 'No debug logs found (ApexLog records).<br>'
+        + '<span style="font-size:11px;color:#383e4a;line-height:1.6">Trace flags exist but no Apex has been executed yet.<br>'
+        + 'Run some Apex, or <b style="color:#58a6ff">Import</b> a <code>.log</code> file from your computer.</span></div>';
+      return;
+    }
+
+    const importedHtml = imported.map(_importedItemHtml).join('');
+
+    const apiHtml = logs.map(log => {
+      const time = _formatLogTime(log.LastModifiedDate);
+      const duration = log.DurationMilliseconds;
+      const size = _formatBytes(log.LogLength);
+      const op = (log.Operation || '').replace(/^\//, '').substring(0, 35);
+      const userName = log.LogUser ? log.LogUser.Name : '';
+      const status = log.Status || '';
+      const isError = status.toLowerCase().includes('error') || status.toLowerCase().includes('fatal');
+      const durationColor = duration > 5000 ? '#f85149' : duration > 2000 ? '#fbbf24' : '#22c55e';
+
+      return `<div class="sfdt-debuglog-item ${_currentLogId === log.Id ? 'active' : ''} ${isError ? 'error' : ''}" data-id="${log.Id}">
+        <div class="sfdt-debuglog-item-header">
+          <span class="sfdt-debuglog-item-time">${time}</span>
+          <span class="sfdt-debuglog-item-duration" style="color:${durationColor}">${duration}ms</span>
+        </div>
+        <div class="sfdt-debuglog-item-op" title="${_esc(log.Operation || '')}">${_esc(op || 'Unknown')}</div>
+        <div class="sfdt-debuglog-item-meta">
+          ${userName ? `<span style="color:#c084fc">${_esc(userName)}</span>` : ''}
+          <span>${_esc(log.Request || '')}</span>
+          <span>${size}</span>
+          ${isError ? '<span style="color:#f85149">ERROR</span>' : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    listBody.innerHTML = importedHtml + apiHtml;
+
+    listBody.querySelectorAll('.sfdt-debuglog-item').forEach(el => {
+      el.addEventListener('click', () => _loadLogDetail(el.dataset.id));
+    });
   }
 
   // ─── Log Detail ───────────────────────────────────────
@@ -177,6 +302,7 @@ const DebugLogPanel = (() => {
   let _parsedLog = null;
 
   async function _loadLogDetail(logId) {
+    _track('view');
     _currentLogId = logId;
 
     // Highlight active item
@@ -189,7 +315,11 @@ const DebugLogPanel = (() => {
     detailBody.innerHTML = '<div class="sfdt-loading">Loading log body...</div>';
 
     try {
-      _rawLog = await API().getDebugLogBody(logId);
+      if (_importedLogs[logId]) {
+        _rawLog = _importedLogs[logId].raw;
+      } else {
+        _rawLog = await API().getDebugLogBody(logId);
+      }
       _parsedLog = _parseLog(_rawLog);
       _showTab('limits');
     } catch (err) {
@@ -415,6 +545,7 @@ const DebugLogPanel = (() => {
   let _dbSort = { col: 'rows', dir: 'desc' };
 
   function _showTab(tab) {
+    if (tab === 'analysis' || tab === 'timeline' || tab === 'calltree') _track('analyze');
     _currentTab = tab;
     var tabs = ['summary', 'limits', 'timeline', 'calltree', 'analysis', 'database', 'raw'];
     for (var t = 0; t < tabs.length; t++) {
@@ -505,9 +636,11 @@ const DebugLogPanel = (() => {
     var classAgg = {};
 
     function _bump(map, key, name) {
-      if (!map[key]) map[key] = { name: name, calls: 0, totalMs: 0, heap: 0, soqls: 0, soqlRows: 0, dmls: 0, dmlRows: 0 };
+      if (!map[key]) map[key] = { name: name, calls: 0, totalMs: 0, heap: 0, soqls: 0, soqlRows: 0, dmls: 0, dmlRows: 0, line: 0 };
       return map[key];
     }
+
+    function _setLine(agg, ln) { if (ln && (!agg.line || ln < agg.line)) agg.line = ln; }
 
     for (var mi = 0; mi < p.methods.length; mi++) {
       var m = p.methods[mi];
@@ -515,12 +648,14 @@ const DebugLogPanel = (() => {
       mb.calls += 1;
       mb.totalMs += m.durationMs;
       mb.heap += (m.heapBytes || 0);
+      _setLine(mb, m.startLine);
 
       var cls = _limitClassOf(m.name);
       var cb = _bump(classAgg, cls, cls);
       cb.calls += 1;
       cb.totalMs += m.durationMs;
       cb.heap += (m.heapBytes || 0);
+      _setLine(cb, m.startLine);
     }
 
     for (var qi = 0; qi < p.soqlQueries.length; qi++) {
@@ -529,10 +664,12 @@ const DebugLogPanel = (() => {
       var mb2 = _bump(methodAgg, mkey, mkey);
       mb2.soqls += 1;
       mb2.soqlRows += q.rows || 0;
+      _setLine(mb2, q.line);
       var cls2 = _limitClassOf(mkey);
       var cb2 = _bump(classAgg, cls2, cls2);
       cb2.soqls += 1;
       cb2.soqlRows += q.rows || 0;
+      _setLine(cb2, q.line);
     }
 
     for (var di = 0; di < p.dmlOps.length; di++) {
@@ -541,10 +678,12 @@ const DebugLogPanel = (() => {
       var mb3 = _bump(methodAgg, dkey, dkey);
       mb3.dmls += 1;
       mb3.dmlRows += d.rows || 0;
+      _setLine(mb3, d.line);
       var cls3 = _limitClassOf(dkey);
       var cb3 = _bump(classAgg, cls3, cls3);
       cb3.dmls += 1;
       cb3.dmlRows += d.rows || 0;
+      _setLine(cb3, d.line);
     }
 
     var source = _limitsScope === 'class' ? classAgg : methodAgg;
@@ -576,6 +715,13 @@ const DebugLogPanel = (() => {
     // ── Smart insights: auto-detect anti-patterns ──
     var insights = [];
 
+    function _findLimitLine(sub) {
+      for (var fi = 0; fi < p.lines.length; fi++) {
+        if (p.lines[fi].raw.indexOf(sub) !== -1) return p.lines[fi].num;
+      }
+      return 0;
+    }
+
     // 1. Duplicate SOQL detection (same query repeated multiple times = N+1 / SOQL in loop)
     var soqlByQueryMethod = {};
     for (var sqi2 = 0; sqi2 < p.soqlQueries.length; sqi2++) {
@@ -593,7 +739,8 @@ const DebugLogPanel = (() => {
         icon: I.alert,
         title: 'Likely SOQL-in-loop / N+1 query',
         detail: '<b>' + _esc(ds.method || '(unknown)') + '</b> executes the same SOQL <b>' + ds.count + '× </b>: <code>' + _esc((ds.query || '').substring(0, 100)) + '</code>',
-        fix: 'Move the query outside the loop and build a Map<Id, SObject> lookup, or add an IN (:ids) filter to fetch all rows in one query.'
+        fix: 'Move the query outside the loop and build a Map<Id, SObject> lookup, or add an IN (:ids) filter to fetch all rows in one query.',
+        line: ds.firstLine
       });
     }
 
@@ -602,7 +749,7 @@ const DebugLogPanel = (() => {
     for (var dmi2 = 0; dmi2 < p.dmlOps.length; dmi2++) {
       var dd = p.dmlOps[dmi2];
       var dkk = (dd.parentMethod || dd.parentUnit || '') + '||' + dd.operation + '||' + dd.type;
-      if (!dmlByMethod[dkk]) dmlByMethod[dkk] = { count: 0, method: dd.parentMethod || dd.parentUnit, op: dd.operation, type: dd.type };
+      if (!dmlByMethod[dkk]) dmlByMethod[dkk] = { count: 0, method: dd.parentMethod || dd.parentUnit, op: dd.operation, type: dd.type, firstLine: dd.line };
       dmlByMethod[dkk].count++;
     }
     var dupDml = Object.values(dmlByMethod).filter(function(x) { return x.count >= 3; })
@@ -614,7 +761,8 @@ const DebugLogPanel = (() => {
         icon: I.alert,
         title: 'Likely DML-in-loop',
         detail: '<b>' + _esc(dm2.method || '(unknown)') + '</b> performs <b>' + dm2.count + '× ' + dm2.op + ' ' + dm2.type + '</b>',
-        fix: 'Collect records into a List<' + dm2.type + '> and perform a single DML operation outside the loop.'
+        fix: 'Collect records into a List<' + dm2.type + '> and perform a single DML operation outside the loop.',
+        line: dm2.firstLine
       });
     }
 
@@ -637,7 +785,8 @@ const DebugLogPanel = (() => {
           icon: I.alert,
           title: 'Governor limit near ceiling',
           detail: limitDefsForInsight[li2].name + ' usage is <b>' + Math.round(lpct) + '%</b> (' + lim.used.toLocaleString() + ' of ' + lim.max.toLocaleString() + ')',
-          fix: 'One more call like this and the transaction will throw LimitException. Optimise the top consumers listed below.'
+          fix: 'One more call like this and the transaction will throw LimitException. Optimise the top consumers listed below.',
+          line: _findLimitLine('Number of ' + limitDefsForInsight[li2].name) || _findLimitLine('LIMIT_USAGE')
         });
       }
     }
@@ -653,7 +802,8 @@ const DebugLogPanel = (() => {
         icon: I.alert,
         title: 'Large query result set',
         detail: 'A single SOQL in <b>' + _esc(bigQuery.parentMethod || bigQuery.parentUnit || '(unknown)') + '</b> returned <b>' + bigQuery.rows.toLocaleString() + ' rows</b>',
-        fix: 'Add a tighter WHERE clause, use LIMIT, or switch to a Database.QueryLocator in a Batch.'
+        fix: 'Add a tighter WHERE clause, use LIMIT, or switch to a Database.QueryLocator in a Batch.',
+        line: bigQuery.line
       });
     }
 
@@ -664,7 +814,8 @@ const DebugLogPanel = (() => {
         icon: I.alert,
         title: p.exceptions.length + ' exception' + (p.exceptions.length > 1 ? 's' : '') + ' thrown',
         detail: _esc((p.exceptions[0].message || '').substring(0, 160)),
-        fix: 'See the Raw tab (filter by Errors) for full stack trace.'
+        fix: 'See the Raw tab for the full stack trace.',
+        line: p.exceptions[0].line
       });
     }
 
@@ -673,10 +824,13 @@ const DebugLogPanel = (() => {
       insightsHtml = '<div class="sfdt-insights-list">';
       for (var ii = 0; ii < insights.length; ii++) {
         var ins = insights[ii];
-        insightsHtml += '<div class="sfdt-insight-item sfdt-insight-' + ins.severity + '">'
+        var insClickable = ins.line ? ' sfdt-nav' : '';
+        var insAttr = ins.line ? ' data-line="' + ins.line + '" title="Jump to line ' + ins.line + ' in Raw"' : '';
+        var insJump = ins.line ? '<span class="sfdt-insight-jump">' + I.arrowRight + ' Line ' + ins.line + '</span>' : '';
+        insightsHtml += '<div class="sfdt-insight-item sfdt-insight-' + ins.severity + insClickable + '"' + insAttr + '>'
           + '<span class="sfdt-insight-icon">' + ins.icon + '</span>'
           + '<div class="sfdt-insight-body">'
-          +   '<div class="sfdt-insight-title">' + _esc(ins.title) + '</div>'
+          +   '<div class="sfdt-insight-title">' + _esc(ins.title) + insJump + '</div>'
           +   '<div class="sfdt-insight-detail">' + ins.detail + '</div>'
           +   '<div class="sfdt-insight-fix"><b>Fix:</b> ' + _esc(ins.fix) + '</div>'
           + '</div></div>';
@@ -705,7 +859,9 @@ const DebugLogPanel = (() => {
       var short = nm.length > 52 ? nm.substring(0, 49) + '...' : nm;
       var valDisp = unit === 'bytes' ? _formatBytes(value) : (value.toLocaleString() + (unit ? ' ' + unit : ''));
       var totalDisp = total ? (unit === 'bytes' ? _formatBytes(total) : total.toLocaleString() + (unit ? ' ' + unit : '')) : '';
-      return '<div class="sfdt-hotcard" style="border-left:3px solid ' + color + '">'
+      var navCls = target.line ? ' sfdt-nav' : '';
+      var navAttr = target.line ? ' data-line="' + target.line + '" title="Jump to line ' + target.line + ' in Raw"' : '';
+      return '<div class="sfdt-hotcard' + navCls + '" style="border-left:3px solid ' + color + '"' + navAttr + '>'
         + '<div class="sfdt-hotcard-head">'
         +   '<span class="sfdt-hotcard-icon" style="color:' + color + '">' + icon + '</span>'
         +   '<div class="sfdt-hotcard-titles">'
@@ -718,6 +874,7 @@ const DebugLogPanel = (() => {
         +   '<span class="sfdt-hotcard-num" style="color:' + color + '">' + valDisp + '</span>'
         +   (total ? '<span class="sfdt-hotcard-of">of ' + totalDisp + '</span>'
                    + '<span class="sfdt-hotcard-pct" style="color:' + color + '">' + pct + '%</span>' : '')
+        +   (target.line ? '<span class="sfdt-hotcard-jump">' + I.arrowRight + ' L' + target.line + '</span>' : '')
         + '</div></div>';
     }
 
@@ -769,8 +926,10 @@ const DebugLogPanel = (() => {
       var r = rows[ti];
       var impactColor = r.impact > 60 ? '#f85149' : r.impact > 25 ? '#fbbf24' : '#8b949e';
       var nameDisplay = r.name.length > 70 ? r.name.substring(0, 67) + '...' : r.name;
-      tableHtml += '<tr>'
-        + '<td class="sfdt-an-name" title="' + _esc(r.name) + '">' + _esc(nameDisplay) + '</td>'
+      var rowNav = r.line ? ' class="sfdt-nav sfdt-limits-row"' : '';
+      var rowNavAttr = r.line ? ' data-line="' + r.line + '" title="Jump to line ' + r.line + ' in Raw"' : '';
+      tableHtml += '<tr' + rowNav + rowNavAttr + '>'
+        + '<td class="sfdt-an-name" title="' + _esc(r.name) + '">' + (r.line ? '<span class="sfdt-row-jump">' + I.arrowRight + '</span>' : '') + _esc(nameDisplay) + '</td>'
         + '<td class="sfdt-an-num" style="color:' + impactColor + ' !important;font-weight:600 !important">' + Math.round(r.impact) + '</td>'
         + '<td class="sfdt-an-num">' + (r.calls || 0).toLocaleString() + '</td>'
         + _cellNum(r.soqls, maxSoql, '#c084fc')
@@ -838,6 +997,13 @@ const DebugLogPanel = (() => {
     h += '</div>';
     body.innerHTML = h;
 
+    body.querySelectorAll('.sfdt-nav').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var n = parseInt(el.getAttribute('data-line'), 10);
+        if (n) _gotoLine(n);
+      });
+    });
+
     body.querySelectorAll('.sfdt-an-sort').forEach(function(th) {
       th.addEventListener('click', function() {
         var c = th.dataset.col;
@@ -873,6 +1039,9 @@ const DebugLogPanel = (() => {
     if (!_parsedLog) return;
     var p = _parsedLog;
     var body = _container.querySelector('#dl-detail-body');
+
+    var insights = _computeInsights(p);
+    var insightsHtml = _renderInsightsSection(insights);
 
     var limitsHtml = Object.entries(p.limits).map(function(kv) {
       var key = kv[0], val = kv[1];
@@ -920,6 +1089,7 @@ const DebugLogPanel = (() => {
     }).join('');
 
     body.innerHTML = '<div class="sfdt-summary-scroll">'
+      + insightsHtml
       + '<div class="sfdt-stats-grid">'
       + _statCard(p.cpuTime || '\u2014', 'ms', 'CPU Time', '#58a6ff')
       + _statCard(p.soqlCount, '', 'SOQL Queries', '#c084fc')
@@ -935,7 +1105,132 @@ const DebugLogPanel = (() => {
       + (p.methods.length > 0 ? '<div class="sfdt-summary-section"><div class="sfdt-section-title">\u23F1 Slowest Methods (Top 10)</div>' + methodsHtml + '</div>' : '')
       + (p.userDebugs.length > 0 ? '<div class="sfdt-summary-section"><div class="sfdt-section-title">\uD83D\uDCDD Debug Statements (' + p.userDebugs.length + ')</div>' + debugPreview + (p.userDebugs.length > 10 ? '<div style="padding:6px 0;color:#383e4a;font-size:10px">+' + (p.userDebugs.length - 10) + ' more \u2014 see Raw tab for all</div>' : '') + '</div>' : '')
       + '</div>';
+
+    body.querySelectorAll('.sfdt-insight[data-line]').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var n = parseInt(row.getAttribute('data-line'), 10);
+        if (n) _gotoLine(n);
+      });
+    });
   }
+
+  // ─── Issues at a glance ───────────────────────────────
+
+  function _normalizeQuery(q) {
+    return (q || '')
+      .replace(/'[^']*'/g, '?')
+      .replace(/:\w+/g, '?')
+      .replace(/\b\d+\b/g, '?')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function _computeInsights(p) {
+    var issues = [];
+
+    // 1. Fatal errors / thrown exceptions — the "what exactly happened"
+    p.exceptions.slice(0, 25).forEach(function(ex) {
+      issues.push({ sev: 'critical', title: 'Exception thrown', detail: ex.message, line: ex.line });
+    });
+
+    // 2. Governor limits close to / over the ceiling
+    Object.keys(p.limits).forEach(function(key) {
+      var val = p.limits[key];
+      if (!val || !val.max) return;
+      var pct = Math.round((val.used / val.max) * 100);
+      var label = key.replace(/([A-Z])/g, ' $1').replace(/^./, function(s) { return s.toUpperCase(); });
+      if (pct >= 90) issues.push({ sev: 'critical', title: 'Governor limit almost hit: ' + label, detail: val.used + ' of ' + val.max + ' (' + pct + '%)' });
+      else if (pct >= 75) issues.push({ sev: 'warning', title: 'High usage: ' + label, detail: val.used + ' of ' + val.max + ' (' + pct + '%)' });
+    });
+
+    // 3. SOQL-in-loop: same query shape executed many times
+    var qMap = {};
+    p.soqlQueries.forEach(function(q) {
+      var n = _normalizeQuery(q.query);
+      if (!n) return;
+      if (!qMap[n]) qMap[n] = { count: 0, line: q.line, sample: q.query, parent: q.parentMethod || q.parentUnit || '' };
+      qMap[n].count++;
+    });
+    Object.keys(qMap).forEach(function(n) {
+      var c = qMap[n];
+      if (c.count >= 5) issues.push({ sev: 'warning', title: 'Possible SOQL in loop (' + c.count + '\u00D7)', detail: (c.parent ? c.parent + ' \u2014 ' : '') + c.sample, line: c.line });
+    });
+
+    // 4. DML-in-loop: same DML op repeated many times in one context
+    var dMap = {};
+    p.dmlOps.forEach(function(d) {
+      var k = (d.parentMethod || d.parentUnit || '') + '|' + d.operation + '|' + d.type;
+      if (!dMap[k]) dMap[k] = { count: 0, line: d.line, op: d.operation, type: d.type, parent: d.parentMethod || d.parentUnit || '' };
+      dMap[k].count++;
+    });
+    Object.keys(dMap).forEach(function(k) {
+      var c = dMap[k];
+      if (c.count >= 5) issues.push({ sev: 'warning', title: 'Possible DML in loop (' + c.count + '\u00D7)', detail: (c.parent ? c.parent + ' \u2014 ' : '') + c.op + ' ' + c.type, line: c.line });
+    });
+
+    // 5. Slowest method well above the norm
+    if (p.methods.length && p.methods[0].durationMs >= 3000) {
+      var m = p.methods[0];
+      issues.push({ sev: 'warning', title: 'Slow method: ' + m.durationMs + 'ms', detail: m.name, line: m.startLine });
+    }
+
+    // 6. ERROR-level user debugs
+    var errDbg = p.userDebugs.filter(function(d) { return d.level === 'ERROR'; });
+    if (errDbg.length) {
+      issues.push({ sev: 'warning', title: errDbg.length + ' ERROR debug statement' + (errDbg.length === 1 ? '' : 's'), detail: errDbg[0].message, line: errDbg[0].line });
+    }
+
+    var order = { critical: 0, warning: 1, info: 2 };
+    issues.sort(function(a, b) { return order[a.sev] - order[b.sev]; });
+    return issues;
+  }
+
+  function _renderInsightsSection(issues) {
+    if (!issues || issues.length === 0) {
+      return '<div class="sfdt-summary-section">'
+        + '<div class="sfdt-insight sfdt-insight-ok">'
+        + '<span class="sfdt-insight-icon">\u2714</span>'
+        + '<div class="sfdt-insight-body"><div class="sfdt-insight-title">No issues detected</div>'
+        + '<div class="sfdt-insight-detail">No exceptions, no governor-limit pressure, and no obvious loop hotspots in this log.</div></div>'
+        + '</div></div>';
+    }
+
+    var crit = issues.filter(function(i) { return i.sev === 'critical'; }).length;
+    var warn = issues.filter(function(i) { return i.sev === 'warning'; }).length;
+    var counts = [];
+    if (crit) counts.push('<span style="color:#f85149">' + crit + ' critical</span>');
+    if (warn) counts.push('<span style="color:#fbbf24">' + warn + ' warning' + (warn === 1 ? '' : 's') + '</span>');
+
+    var rows = issues.map(function(it) {
+      var icon = it.sev === 'critical' ? '\u2715' : it.sev === 'warning' ? '\u26A0' : 'i';
+      var lineTag = it.line ? '<span class="sfdt-insight-line">L' + it.line + '</span>' : '';
+      var clickable = it.line ? ' sfdt-insight-clickable' : '';
+      return '<div class="sfdt-insight sfdt-insight-' + it.sev + clickable + '"' + (it.line ? ' data-line="' + it.line + '" title="Jump to line ' + it.line + '"' : '') + '>'
+        + '<span class="sfdt-insight-icon">' + icon + '</span>'
+        + '<div class="sfdt-insight-body">'
+        + '<div class="sfdt-insight-title">' + _esc(it.title) + lineTag + '</div>'
+        + (it.detail ? '<div class="sfdt-insight-detail">' + _esc(String(it.detail).substring(0, 220)) + '</div>' : '')
+        + '</div></div>';
+    }).join('');
+
+    return '<div class="sfdt-summary-section">'
+      + '<div class="sfdt-section-title" style="color:#f85149">\u26A1 Issues at a Glance <span style="color:#6e7681;font-weight:400">(' + counts.join(' \u00B7 ') + ')</span></div>'
+      + rows
+      + '</div>';
+  }
+
+  function _gotoLine(n) {
+    _logFilter = 'all';
+    _searchTerm = '';
+    var filterSel = _container.querySelector('#dl-filter');
+    var searchInput = _container.querySelector('#dl-search');
+    if (filterSel) filterSel.value = 'all';
+    if (searchInput) searchInput.value = '';
+    _showTab('raw');
+    setTimeout(function() { _scrollToLogLine(n); }, 60);
+  }
+
 
   function _statCard(value, unit, label, color) {
     return '<div class="sfdt-stat-card">'
@@ -1470,8 +1765,7 @@ const DebugLogPanel = (() => {
     }
 
     var h = '<div class="sfdt-raw-log">';
-    var max = Math.min(lines.length, 2000);
-    for (var i = 0; i < max; i++) {
+    for (var i = 0; i < lines.length; i++) {
       var l = lines[i];
       var typeClass = 'sfdt-log-' + l.type;
       var text;
@@ -1480,9 +1774,8 @@ const DebugLogPanel = (() => {
       } else {
         text = _esc(l.raw);
       }
-      h += '<div class="sfdt-log-line ' + typeClass + '"><span class="sfdt-log-num">' + l.num + '</span><span class="sfdt-log-text">' + text + '</span></div>';
+      h += '<div class="sfdt-log-line ' + typeClass + '" data-linenum="' + l.num + '"><span class="sfdt-log-num">' + l.num + '</span><span class="sfdt-log-text">' + text + '</span></div>';
     }
-    if (lines.length > 2000) h += '<div style="padding:8px 16px;color:#6e7681">...' + (lines.length - 2000) + ' more lines</div>';
     h += '</div>';
     body.innerHTML = h;
   }
@@ -1492,7 +1785,21 @@ const DebugLogPanel = (() => {
   function _scrollToLogLine(lineNum) {
     var rawContainer = _container.querySelector('.sfdt-raw-log');
     if (!rawContainer) return;
-    var lineEl = rawContainer.querySelector('.sfdt-log-line:nth-child(' + Math.min(lineNum, 2000) + ')');
+    var lineEl = rawContainer.querySelector('.sfdt-log-line[data-linenum="' + lineNum + '"]');
+    if (!lineEl) {
+      // Target hidden by an active filter — reset filters and re-render, then retry
+      if (_logFilter !== 'all' || _searchTerm) {
+        _logFilter = 'all';
+        _searchTerm = '';
+        var searchInput = _container.querySelector('#dl-search');
+        if (searchInput) searchInput.value = '';
+        var filterSel = _container.querySelector('#dl-filter');
+        if (filterSel) filterSel.value = 'all';
+        _renderFilteredLines();
+        rawContainer = _container.querySelector('.sfdt-raw-log');
+        lineEl = rawContainer && rawContainer.querySelector('.sfdt-log-line[data-linenum="' + lineNum + '"]');
+      }
+    }
     if (lineEl) {
       lineEl.scrollIntoView({ block: 'center' });
       lineEl.style.background = 'rgba(88,166,255,0.2)';
@@ -1544,7 +1851,11 @@ const DebugLogPanel = (() => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `debug_log_${_currentLogId || 'unknown'}.log`;
+    var fname = _importedLogs[_currentLogId]
+      ? _importedLogs[_currentLogId].name
+      : `debug_log_${_currentLogId || 'unknown'}.log`;
+    if (!/\.(log|txt)$/i.test(fname)) fname += '.log';
+    a.download = fname;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

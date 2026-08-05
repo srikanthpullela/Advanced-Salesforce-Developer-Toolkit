@@ -26,7 +26,7 @@ const SFDTTelemetryService = (() => {
   const OPT_OUT_KEY = 'sfdt_telemetry_opt_out';
   const USAGE_KEY = 'sfdt_feature_usage';
   const USAGE_SENT_KEY = 'sfdt_usage_last_sent';
-  const USAGE_SEND_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+  const USAGE_SEND_INTERVAL = 5 * 60 * 1000; // 5 minutes — send frequently for near-real-time visibility
 
   /**
    * Record that this org is using the extension.
@@ -250,9 +250,40 @@ const SFDTTelemetryService = (() => {
       }
 
       await _setStorage(USAGE_KEY, usage);
+
+      // Auto-flush if enough time has passed since last send
+      _scheduleFlush();
     } catch {
       // Never break the extension
     }
+  }
+
+  // Debounce flush — wait 10 seconds after last event before flushing
+  let _flushTimer = null;
+  function _scheduleFlush() {
+    if (_flushTimer) clearTimeout(_flushTimer);
+    _flushTimer = setTimeout(() => {
+      flushUsage();
+      _flushTimer = null;
+    }, 10000); // 10 seconds after last event
+  }
+
+  // Flush on page unload (best-effort using sendBeacon)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+      try {
+        const usage = JSON.parse(localStorage.getItem('_sfdt_pending_flush') || 'null');
+        // Use sendBeacon for reliable delivery on page exit
+        if (USAGE_ENDPOINT && navigator.sendBeacon) {
+          // Attempt to flush synchronously using cached data
+          const storageData = localStorage.getItem('_sfdt_beacon_payload');
+          if (storageData) {
+            navigator.sendBeacon(USAGE_ENDPOINT, storageData);
+            localStorage.removeItem('_sfdt_beacon_payload');
+          }
+        }
+      } catch { /* ignore */ }
+    });
   }
 
   /**
@@ -297,16 +328,41 @@ const SFDTTelemetryService = (() => {
         navigator_open: orgUsage['navigator.open'] || 0,
         debuglog_open: orgUsage['debuglog.open'] || 0,
         execanon_open: orgUsage['execanon.open'] || 0,
-        // Feature-specific actions
+        // Search actions
+        search_query: orgUsage['search.query'] || 0,
         search_navigate: orgUsage['search.navigate'] || 0,
+        // SOQL actions (original)
         soql_run: orgUsage['soql.run'] || 0,
-        soql_export: orgUsage['soql.export'] || 0,
+        soql_export_csv: orgUsage['soql.export_csv'] || 0,
+        soql_export_json: orgUsage['soql.export_json'] || 0,
+        // SOQL actions (new features)
+        soql_sosl: orgUsage['soql.sosl'] || 0,
+        soql_explain: orgUsage['soql.explain'] || 0,
+        soql_selectAllFields: orgUsage['soql.selectAllFields'] || 0,
+        soql_apex: orgUsage['soql.apex'] || 0,
+        soql_inlineEdit: orgUsage['soql.inlineEdit'] || 0,
+        soql_import: orgUsage['soql.import'] || 0,
+        soql_template: orgUsage['soql.template'] || 0,
+        soql_schema: orgUsage['soql.schema'] || 0,
+        soql_chart: orgUsage['soql.chart'] || 0,
+        soql_sort: orgUsage['soql.sort'] || 0,
+        soql_diff: orgUsage['soql.diff'] || 0,
+        soql_relationship: orgUsage['soql.relationship'] || 0,
+        soql_picklist: orgUsage['soql.picklist'] || 0,
+        soql_newTab: orgUsage['soql.newTab'] || 0,
+        soql_keyboard: orgUsage['soql.keyboard'] || 0,
+        soql_historySearch: orgUsage['soql.historySearch'] || 0,
+        // Inspector actions
         inspector_edit: orgUsage['inspector.edit'] || 0,
         inspector_impact: orgUsage['inspector.impact'] || 0,
         inspector_graph: orgUsage['inspector.graph'] || 0,
         inspector_compare: orgUsage['inspector.compare'] || 0,
         inspector_json: orgUsage['inspector.json'] || 0,
+        // Navigator actions
+        navigator_navigate: orgUsage['navigator.navigate'] || 0,
+        // Execute Anonymous actions
         execanon_run: orgUsage['execanon.run'] || 0,
+        // Debug Log actions
         debuglog_view: orgUsage['debuglog.view'] || 0,
         debuglog_analyze: orgUsage['debuglog.analyze'] || 0
       };
@@ -319,12 +375,15 @@ const SFDTTelemetryService = (() => {
         body: JSON.stringify(payload)
       });
 
+      // Clear beacon cache after successful send
+      try { localStorage.removeItem('_sfdt_beacon_payload'); } catch { /* ignore */ }
+
       // Reset counters for this org after sending
       delete usage[orgId];
       await _setStorage(USAGE_KEY, usage);
       await _setStorage(USAGE_SENT_KEY, Date.now());
 
-      window._sfdtLogger.log('[SFDT] Usage data flushed.');
+      window._sfdtLogger.log('[SFDT] Usage data flushed. Next flush in', USAGE_SEND_INTERVAL / 1000, 'seconds.');
     } catch (err) {
       window._sfdtLogger.debug('[SFDT] Usage flush error:', err.message);
     }

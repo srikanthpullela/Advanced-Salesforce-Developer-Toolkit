@@ -57,6 +57,65 @@ const SearchService = (() => {
     return Math.max(1, score - (t.length - q.length));
   }
 
+  // ─── Tokenized Matching (order-independent, space/camelCase aware) ───
+
+  /**
+   * Split a string into comparable tokens. Splits on whitespace, separators
+   * (_ . -) and camelCase boundaries so that "ColumnRenderThreshold",
+   * "Column Render Threshold" and "column_render_threshold" all yield the same
+   * tokens ["Column","Render","Threshold"].
+   */
+  function _tokenize(str) {
+    if (!str) return [];
+    return String(str)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')      // camelCase → "camel Case"
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')   // ACRONYMWord → "ACRONYM Word"
+      .replace(/[_.\-]+/g, ' ')                     // separators → space
+      .split(/\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Score how well EVERY token of `query` is present in `text`, regardless of
+   * order or spacing. Returns 0 unless all tokens are found; otherwise a positive
+   * score that rewards whole-word matches and tight coverage. This is what lets
+   * "Column Threshold" match "Column Render Threshold" even though the words are
+   * not contiguous.
+   */
+  function _tokenMatchScore(query, text) {
+    if (!text) return 0;
+    const qTokens = _tokenize(query).map(s => s.toLowerCase());
+    if (qTokens.length === 0) return 0;
+    const tWords = _tokenize(text).map(s => s.toLowerCase());
+    if (tWords.length === 0) return 0;
+    let matched = 0, wholeWord = 0;
+    for (const qt of qTokens) {
+      if (tWords.includes(qt)) { matched++; wholeWord++; }
+      else if (tWords.some(w => w.includes(qt))) { matched++; }
+    }
+    if (matched < qTokens.length) return 0;
+    return 700 + wholeWord * 30 + Math.round((qTokens.length / tWords.length) * 100);
+  }
+
+  /**
+   * Best relevance of a query against a field's label / API name. Combines the
+   * character-level fuzzy score, the token-aware score, and a spaces-removed
+   * comparison (so "ColumnRenderThreshold" scores high against "Column Render
+   * Threshold"). Used to rank the exact setting to the top.
+   */
+  function _fieldRelevance(query, label, apiName) {
+    const compactQ = (query || '').replace(/\s+/g, '');
+    const compactLabel = (label || '').replace(/\s+/g, '');
+    return Math.max(
+      _fuzzyScore(query, label || ''),
+      _fuzzyScore(query, apiName || ''),
+      _fuzzyScore(compactQ, compactLabel),
+      _tokenMatchScore(query, label),
+      _tokenMatchScore(query, apiName)
+    );
+  }
+
   // ─── Code Symbol Extraction ───────────────────────────
 
   function _extractSymbols(body) {
@@ -725,7 +784,16 @@ const SearchService = (() => {
     if (!API || !API.isConnected()) return [];
 
     const maxResults = options.maxResults || 30;
-    const safeQuery = query.replace(/'/g, "\\'");
+
+    // Tokenize the query so multi-word, reordered, no-space and partial variants
+    // all resolve to the same field. "Column Threshold", "ColumnRenderThreshold"
+    // and "Render Threshold" should all find "Column Render Threshold". Each token
+    // becomes its own LIKE and ALL must be present (order-independent), instead of
+    // a single contiguous-substring LIKE which misses non-adjacent words.
+    const tokens = _tokenize(query).slice(0, 6);
+    const safeTokens = (tokens.length ? tokens : [query]).map(t => t.replace(/'/g, "\\'"));
+    const labelClause = safeTokens.map(t => `Label LIKE '%${t}%'`).join(' AND ');
+    const apiNameClause = safeTokens.map(t => `QualifiedApiName LIKE '%${t}%'`).join(' AND ');
 
     // EntityParticle REQUIRES a filter on a reified column (EntityDefinitionId, FieldDefinitionId, or DurableId).
     // We cannot search across all objects without specifying which objects to search.
@@ -743,7 +811,12 @@ const SearchService = (() => {
       .map(o => o.name)
       .filter(n => n);
 
-    const allObjs = [...new Set([...standardObjs, ...customObjNames, ...customSettingNames])];
+    // Custom Settings (e.g. Config / Comply System Properties) are the priority for
+    // this search — ALWAYS search every one of them so no setting is ever missed.
+    // Standard + custom objects are searched best-effort within the result cap.
+    const settingObjNames = [...new Set(customSettingNames)];
+    const settingSet = new Set(settingObjNames);
+    const otherObjNames = [...new Set([...standardObjs, ...customObjNames])].filter(n => !settingSet.has(n));
 
     // Build label lookup for objects from metadata index
     const objLabelMap = {};
@@ -754,103 +827,130 @@ const SearchService = (() => {
       if (o.name) objLabelMap[o.name] = o.label || o.name;
     }
 
+    // Custom Settings block the per-field Object Manager view and have no page
+    // layouts, so field results must fall back to navigating to the SETTING itself.
+    // Capture each setting's key prefix so navigation can reuse the same safe
+    // Custom Setting routing used everywhere else.
+    const settingKeyPrefixMap = {};
+    for (const o of (idx.customSettings || [])) {
+      if (o.name) settingKeyPrefixMap[o.name] = o.keyPrefix;
+    }
+
     // Query EntityParticle in batches — dynamically sized to keep full URL under browser limit
     const seen = new Set();
+
+    // Turn one EntityParticle row into a ranked field result. Resolves the parent
+    // object's friendly label (e.g. "Config System Properties") and scores relevance
+    // so the exact match sorts to the top.
+    function pushRecord(r) {
+      const ed = r.EntityDefinition || null;
+      const entityApi = (ed && ed.QualifiedApiName) || r.EntityDefinitionId || 'Unknown';
+      const id = r.DurableId || `${entityApi}.${r.QualifiedApiName}`;
+      if (seen.has(id)) return;
+      seen.add(id);
+      const label = r.Label || r.QualifiedApiName;
+      const apiName = r.QualifiedApiName;
+      const relevance = _fieldRelevance(query, label, apiName);
+      // Custom-setting fields are the priority — rank them above ordinary object
+      // fields so a matching setting is never buried behind object-field results.
+      const settingBonus = settingSet.has(entityApi) ? 130 : 0;
+      allResults.push({
+        id,
+        name: label,
+        type: 'Field',
+        fieldApiName: apiName,
+        fieldDataType: r.DataType || 'Unknown',
+        entityName: entityApi,
+        entityLabel: (ed && ed.Label) || objLabelMap[entityApi] || entityApi,
+        isCustomSetting: settingSet.has(entityApi),
+        settingKeyPrefix: settingKeyPrefixMap[entityApi],
+        score: 350 + Math.min(120, Math.round(relevance / 1000 * 120)) + settingBonus,
+        matchType: 'field',
+        category: 'fields'
+      });
+    }
+
     // The full URL includes: base URL (~80) + /services/data/v59.0/tooling/query/?q= (~45) + encoded SOQL
     // Browser GET URL limit is ~2048 chars; keep well under that
     const MAX_URL_LEN = 1800;
-    const soqlPrefix = `SELECT DurableId, QualifiedApiName, Label, DataType, EntityDefinitionId FROM EntityParticle WHERE EntityDefinitionId IN (`;
-    const soqlSuffix = `) AND Label LIKE '%${safeQuery}%' LIMIT ${maxResults}`;
+    // Also pull the parent object's API name + label so results can show the exact
+    // setting name instead of a raw durable id.
+    const selectCols = 'DurableId, QualifiedApiName, Label, DataType, EntityDefinitionId, EntityDefinition.QualifiedApiName, EntityDefinition.Label';
+    const soqlPrefix = `SELECT ${selectCols} FROM EntityParticle WHERE EntityDefinitionId IN (`;
+    const longestClause = labelClause.length >= apiNameClause.length ? labelClause : apiNameClause;
+    const soqlSuffix = `) AND (${longestClause}) LIMIT ${maxResults}`;
     const baseUrlLen = (getInstanceUrl().length || 60) + 50; // base + path overhead
 
     function getInstanceUrl() { return API.getInstanceUrl ? API.getInstanceUrl() : ''; }
 
-    const batches = [];
-    let currentBatch = [];
-    let currentInLen = 0;
-    for (const obj of allObjs) {
-      const entryLen = encodeURIComponent(`'${obj}',`).length;
-      const estimatedTotal = baseUrlLen + encodeURIComponent(soqlPrefix).length + currentInLen + entryLen + encodeURIComponent(soqlSuffix).length;
-      if (currentBatch.length > 0 && estimatedTotal > MAX_URL_LEN) {
-        batches.push(currentBatch);
-        currentBatch = [];
-        currentInLen = 0;
+    function buildBatches(objList) {
+      const out = [];
+      let cur = [];
+      let curLen = 0;
+      for (const obj of objList) {
+        const entryLen = encodeURIComponent(`'${obj}',`).length;
+        const estTotal = baseUrlLen + encodeURIComponent(soqlPrefix).length + curLen + entryLen + encodeURIComponent(soqlSuffix).length;
+        if (cur.length > 0 && estTotal > MAX_URL_LEN) {
+          out.push(cur);
+          cur = [];
+          curLen = 0;
+        }
+        cur.push(obj);
+        curLen += entryLen;
       }
-      currentBatch.push(obj);
-      currentInLen += entryLen;
+      if (cur.length > 0) out.push(cur);
+      return out;
     }
-    if (currentBatch.length > 0) batches.push(currentBatch);
 
-    for (const batch of batches) {
-      if (allResults.length >= maxResults) break;
+    async function searchBatch(batch) {
       const inClause = batch.map(o => `'${o}'`).join(',');
 
-      // Search by Label
+      // Search by field Label — every token must be present (order-independent)
       try {
-        const soql = `SELECT DurableId, QualifiedApiName, Label, DataType, EntityDefinitionId FROM EntityParticle WHERE EntityDefinitionId IN (${inClause}) AND Label LIKE '%${safeQuery}%' LIMIT ${maxResults}`;
+        const soql = `SELECT ${selectCols} FROM EntityParticle WHERE EntityDefinitionId IN (${inClause}) AND (${labelClause}) LIMIT ${maxResults}`;
         const response = await API.toolingQuery(soql);
-        for (const r of (response.records || [])) {
-          const id = r.DurableId || `${r.EntityDefinitionId}.${r.QualifiedApiName}`;
-          if (seen.has(id)) continue;
-          seen.add(id);
-          // EntityDefinitionId for standard objs = 'Account', for custom = API name
-          const entityApi = r.EntityDefinitionId || 'Unknown';
-          allResults.push({
-            id,
-            name: r.Label || r.QualifiedApiName,
-            type: 'Field',
-            fieldApiName: r.QualifiedApiName,
-            fieldDataType: r.DataType || 'Unknown',
-            entityName: entityApi,
-            entityLabel: objLabelMap[entityApi] || entityApi,
-            score: 350,
-            matchType: 'field',
-            category: 'fields'
-          });
-        }
+        for (const r of (response.records || [])) pushRecord(r);
       } catch (err) {
         window._sfdtLogger.debug('[SFDT] EntityParticle label search failed for batch:', err.message);
       }
 
-      // Also search by API name
+      // Also search by field API name — same all-tokens rule
       try {
-        const soql = `SELECT DurableId, QualifiedApiName, Label, DataType, EntityDefinitionId FROM EntityParticle WHERE EntityDefinitionId IN (${inClause}) AND QualifiedApiName LIKE '%${safeQuery}%' LIMIT ${maxResults}`;
+        const soql = `SELECT ${selectCols} FROM EntityParticle WHERE EntityDefinitionId IN (${inClause}) AND (${apiNameClause}) LIMIT ${maxResults}`;
         const response = await API.toolingQuery(soql);
-        for (const r of (response.records || [])) {
-          const id = r.DurableId || `${r.EntityDefinitionId}.${r.QualifiedApiName}`;
-          if (seen.has(id)) continue;
-          seen.add(id);
-          const entityApi = r.EntityDefinitionId || 'Unknown';
-          allResults.push({
-            id,
-            name: r.Label || r.QualifiedApiName,
-            type: 'Field',
-            fieldApiName: r.QualifiedApiName,
-            fieldDataType: r.DataType || 'Unknown',
-            entityName: entityApi,
-            entityLabel: objLabelMap[entityApi] || entityApi,
-            score: 350,
-            matchType: 'field',
-            category: 'fields'
-          });
-        }
+        for (const r of (response.records || [])) pushRecord(r);
       } catch (err) {
         window._sfdtLogger.debug('[SFDT] EntityParticle apiName search failed for batch:', err.message);
       }
     }
 
+    // 1) Always search EVERY custom setting first — no setting is ever skipped.
+    for (const batch of buildBatches(settingObjNames)) {
+      await searchBatch(batch);
+    }
+
+    // 2) Then search standard + custom object fields until the result cap is hit.
+    for (const batch of buildBatches(otherObjNames)) {
+      if (allResults.length >= maxResults) break;
+      await searchBatch(batch);
+    }
+
     if (allResults.length > 0) {
+      allResults.sort((a, b) => b.score - a.score);
       return allResults.slice(0, maxResults);
     }
 
-    // Fallback: CustomField (custom fields only, always works)
+    // Fallback: CustomField (custom fields only, always works) — token-based match
     try {
-      const soql = `SELECT Id, DeveloperName, TableEnumOrId, FullName FROM CustomField WHERE DeveloperName LIKE '%${safeQuery}%' ORDER BY DeveloperName ASC LIMIT ${maxResults}`;
+      const devNameClause = safeTokens.map(t => `DeveloperName LIKE '%${t}%'`).join(' AND ');
+      const soql = `SELECT Id, DeveloperName, TableEnumOrId, FullName FROM CustomField WHERE ${devNameClause} ORDER BY DeveloperName ASC LIMIT ${maxResults}`;
       const response = await API.toolingQuery(soql);
       const records = response.records || [];
       return records.map(r => {
         const entityName = r.TableEnumOrId || 'Unknown';
         const apiName = r.FullName ? r.FullName.split('.').pop() : (r.DeveloperName + '__c');
+        const relevance = _fieldRelevance(query, r.DeveloperName || apiName, apiName);
+        const settingBonus = settingSet.has(entityName) ? 130 : 0;
         return {
           id: r.Id || `${entityName}.${apiName}`,
           name: r.DeveloperName || apiName,
@@ -858,12 +958,14 @@ const SearchService = (() => {
           fieldApiName: apiName,
           fieldDataType: 'Custom Field',
           entityName: entityName,
-          entityLabel: entityName,
-          score: 350,
+          entityLabel: objLabelMap[entityName] || entityName,
+          isCustomSetting: settingSet.has(entityName),
+          settingKeyPrefix: settingKeyPrefixMap[entityName],
+          score: 350 + Math.min(120, Math.round(relevance / 1000 * 120)) + settingBonus,
           matchType: 'field',
           category: 'fields'
         };
-      });
+      }).sort((a, b) => b.score - a.score);
     } catch (err) {
       window._sfdtLogger.debug('[SFDT] CustomField search also failed:', err.message);
     }

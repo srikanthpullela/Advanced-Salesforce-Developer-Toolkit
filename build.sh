@@ -22,8 +22,10 @@ terser background/background.js $TERSER_OPTS -o dist/background/background.js
 echo "  ✓ background/background.js"
 
 # Content
-terser content/salesforceContentScript.js $TERSER_OPTS -o dist/content/salesforceContentScript.js
-echo "  ✓ content/salesforceContentScript.js"
+for f in content/*.js; do
+  terser "$f" $TERSER_OPTS -o "dist/$f"
+  echo "  ✓ $f"
+done
 
 # Popup
 terser popup/popup.js $TERSER_OPTS -o dist/popup/popup.js

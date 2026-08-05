@@ -43,40 +43,34 @@
   // Send command to content script
   async function sendCommand(action) {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.id) {
-      try {
-        await chrome.tabs.sendMessage(tab.id, { action });
-        window.close();
-      } catch (err) {
-        window._sfdtLogger.debug('[SFDT] Could not reach content script:', err.message);
-        // Content script not loaded — try injecting it first
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: [
-              'utils/cacheManager.js',
-              'utils/salesforceApi.js',
-              'utils/icons.js',
-              'utils/shadowDomHelper.js',
-              'services/metadataService.js',
-              'services/searchService.js',
-              'services/queryService.js',
-              'components/searchPalette.js',
-              'components/inspectorPanel.js',
-              'components/navigatorPanel.js',
-              'components/soqlPanel.js',
-              'content/salesforceContentScript.js'
-            ]
-          });
-          // Retry after injection
-          setTimeout(async () => {
-            await chrome.tabs.sendMessage(tab.id, { action });
-            window.close();
-          }, 500);
-        } catch (injectErr) {
-          window._sfdtLogger.debug('[SFDT] Script injection failed:', injectErr);
-        }
-      }
+    if (!tab || !tab.id) return;
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action }, { frameId: 0 });
+      window.close();
+      return;
+    } catch (err) {
+      console.debug('[SFDT] Could not reach content script:', err && err.message);
+    }
+
+    // Content script not loaded — inject it, using the manifest as the single
+    // source of truth so the list can't drift out of sync and inject a partial
+    // (and therefore broken) toolkit.
+    try {
+      const manifest = chrome.runtime.getManifest();
+      const main = (manifest.content_scripts || []).find(
+        cs => Array.isArray(cs.js) && cs.js.some(f => f.includes('salesforceContentScript'))
+      );
+      if (!main) return;
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, frameIds: [0] },
+        files: main.js
+      });
+      await chrome.tabs.sendMessage(tab.id, { action }, { frameId: 0 });
+      window.close();
+    } catch (injectErr) {
+      console.debug('[SFDT] Script injection failed:', injectErr && injectErr.message);
+      const statusText = document.getElementById('popup-status-text');
+      if (statusText) statusText.textContent = 'Reload the Salesforce tab and retry';
     }
   }
 

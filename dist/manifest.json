@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Advanced Salesforce Developer Toolkit",
-  "version": "1.3.4",
+  "version": "1.4.7",
   "description": "SOQL editor, record inspector, Apex debug logs, metadata search, setup navigator — a Developer Console alternative.",
   "permissions": [
     "activeTab",
@@ -39,10 +39,10 @@
         "utils/salesforceApi.js",
         "utils/icons.js",
         "utils/shadowDomHelper.js",
-        "services/telemetryService.js",
         "services/metadataService.js",
         "services/searchService.js",
         "services/queryService.js",
+        "services/telemetryService.js",
         "components/searchPalette.js",
         "components/inspectorPanel.js",
         "components/navigatorPanel.js",
@@ -50,10 +50,25 @@
         "components/dataBuilderPanel.js",
         "components/debugLogPanel.js",
         "components/executeAnonymousPanel.js",
-        "components/dependencyPanel.js",
         "content/salesforceContentScript.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.lightning.force.com/*",
+        "https://*.my.salesforce.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.visual.force.com/*",
+        "https://*.visualforce.com/*"
+      ],
+      "js": [
+        "content/shortcutRelay.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ],
   "action": {

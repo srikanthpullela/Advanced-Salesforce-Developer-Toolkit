@@ -70,6 +70,74 @@ const QueryService = (() => {
     return API().restGet(nextRecordsUrl);
   }
 
+  // ─── Query Plan / EXPLAIN ─────────────────────────────
+
+  async function explainQuery(soql) {
+    const startTime = performance.now();
+    try {
+      // The explain endpoint returns query plan details (cardinality, cost, index usage)
+      const result = await API().restGet(`/query/?explain=${encodeURIComponent(soql)}`);
+      return {
+        success: true,
+        plans: result.plans || [],
+        sourceQuery: result.sourceQuery || soql,
+        executionTime: Math.round(performance.now() - startTime)
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err.message,
+        executionTime: Math.round(performance.now() - startTime)
+      };
+    }
+  }
+
+  // ─── SOSL Search ──────────────────────────────────────
+
+  async function executeSOSL(sosl) {
+    const startTime = performance.now();
+    try {
+      const result = await API().globalSearch(sosl);
+      const elapsed = Math.round(performance.now() - startTime);
+      // SOSL returns searchRecords array (flat) or array of sObject-grouped results
+      const records = result.searchRecords || result || [];
+      return {
+        success: true,
+        records,
+        totalSize: records.length,
+        done: true,
+        executionTime: elapsed,
+        query: sosl
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err.message,
+        executionTime: Math.round(performance.now() - startTime),
+        query: sosl
+      };
+    }
+  }
+
+  // ─── Select All Fields ────────────────────────────────
+
+  async function getAllFields(objectName, filter) {
+    try {
+      const fields = await META().fetchCustomFields(objectName);
+      let filtered = fields;
+      if (filter === 'custom') {
+        filtered = fields.filter(f => f.name.endsWith('__c'));
+      } else if (filter === 'standard') {
+        filtered = fields.filter(f => !f.name.endsWith('__c'));
+      } else if (filter === 'date') {
+        filtered = fields.filter(f => ['date', 'datetime'].includes((f.type || '').toLowerCase()));
+      }
+      return filtered.map(f => f.name);
+    } catch {
+      return [];
+    }
+  }
+
   // ─── Autocomplete ─────────────────────────────────────
 
   async function getObjectSuggestions(partial) {
@@ -387,6 +455,9 @@ const QueryService = (() => {
     executeQuery,
     executeToolingQuery,
     fetchNextPage,
+    explainQuery,
+    executeSOSL,
+    getAllFields,
     getObjectSuggestions,
     getFieldSuggestions,
     getKeywordSuggestions,

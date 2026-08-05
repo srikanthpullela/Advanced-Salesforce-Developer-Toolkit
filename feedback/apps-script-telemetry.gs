@@ -28,10 +28,22 @@ function doPost(e) {
           // Feature opens
           'Search Opens', 'Inspector Opens', 'SOQL Opens',
           'Navigator Opens', 'Debug Log Opens', 'Exec Anon Opens',
-          // Feature actions
-          'Search Navigates', 'SOQL Runs', 'SOQL Exports',
+          // Search actions
+          'Search Queries', 'Search Navigates',
+          // SOQL actions
+          'SOQL Runs', 'SOQL Export CSV', 'SOQL Export JSON',
+          'SOQL SOSL', 'SOQL Explain', 'SOQL Select All Fields',
+          'SOQL Apex', 'SOQL Inline Edit', 'SOQL Import',
+          'SOQL Template', 'SOQL Schema', 'SOQL Chart',
+          'SOQL Sort', 'SOQL Diff', 'SOQL Relationship',
+          'SOQL Picklist', 'SOQL New Tab', 'SOQL Keyboard',
+          'SOQL History Search',
+          // Inspector actions
           'Inspector Edits', 'Inspector Impact', 'Inspector Graph',
           'Inspector Compare', 'Inspector JSON',
+          // Navigator actions
+          'Navigator Navigates',
+          // Other actions
           'Exec Anon Runs', 'Debug Log Views', 'Debug Log Analyze'
         ]);
         // Bold header
@@ -53,15 +65,38 @@ function doPost(e) {
         data.navigator_open || 0,
         data.debuglog_open || 0,
         data.execanon_open || 0,
-        // Feature actions
+        // Search actions
+        data.search_query || 0,
         data.search_navigate || 0,
+        // SOQL actions
         data.soql_run || 0,
-        data.soql_export || 0,
+        data.soql_export_csv || 0,
+        data.soql_export_json || 0,
+        data.soql_sosl || 0,
+        data.soql_explain || 0,
+        data.soql_selectAllFields || 0,
+        data.soql_apex || 0,
+        data.soql_inlineEdit || 0,
+        data.soql_import || 0,
+        data.soql_template || 0,
+        data.soql_schema || 0,
+        data.soql_chart || 0,
+        data.soql_sort || 0,
+        data.soql_diff || 0,
+        data.soql_relationship || 0,
+        data.soql_picklist || 0,
+        data.soql_newTab || 0,
+        data.soql_keyboard || 0,
+        data.soql_historySearch || 0,
+        // Inspector actions
         data.inspector_edit || 0,
         data.inspector_impact || 0,
         data.inspector_graph || 0,
         data.inspector_compare || 0,
         data.inspector_json || 0,
+        // Navigator actions
+        data.navigator_navigate || 0,
+        // Other actions
         data.execanon_run || 0,
         data.debuglog_view || 0,
         data.debuglog_analyze || 0

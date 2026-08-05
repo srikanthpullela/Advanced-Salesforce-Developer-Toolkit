@@ -36,11 +36,14 @@
   const SOQL = window.SFDTSOQLPanel;
   const DEBUGLOG = window.SFDTDebugLogPanel;
   const EXECANON = window.SFDTExecuteAnonymousPanel;
-  const DEPGRAPH = window.SFDTDependencyPanel;
   const TELEMETRY = window.SFDTTelemetryService;
 
   // ─── Register listeners IMMEDIATELY (before session connect) ─────
   chrome.runtime.onMessage.addListener(_handleMessage);
+  // Listen on window *and* document (both capture) — some Salesforce pages
+  // register their own window-capture keydown handlers that stop propagation
+  // before it ever reaches document.
+  window.addEventListener('keydown', _handleKeyboard, true);
   document.addEventListener('keydown', _handleKeyboard, true);
   document.addEventListener('contextmenu', _updateContextMenu, true);
   document.addEventListener('mousedown', _handleOutsideClick, true);
@@ -105,11 +108,8 @@
     window._sfdtLogger.log('[SFDT] Connected to Salesforce.');
     window._sfdtLogger.log('[SFDT] Instance:', API.getInstanceUrl());
 
-    // Record anonymous telemetry (once per org, non-blocking)
-    TELEMETRY.recordInstall();
-
-    // Flush accumulated usage data (every 24h)
-    TELEMETRY.flushUsage();
+    // Record install telemetry (once per org)
+    if (TELEMETRY) TELEMETRY.recordInstall();
 
     // Start background indexing
     window._sfdtLogger.log('[SFDT] Starting metadata index build...');
@@ -127,56 +127,57 @@
 
   // ─── Keyboard Shortcut Handler ────────────────────────
 
+  // Single source of truth for the in-page shortcuts. `code` is layout
+  // independent; `key` is kept as a fallback for remapped/virtual keyboards.
+  const SHORTCUTS = [
+    { code: 'KeyP', key: 'P', command: 'open-search-palette', telemetry: 'search' },
+    { code: 'KeyX', key: 'X', command: 'open-inspector', telemetry: 'inspector' },
+    { code: 'KeyL', key: 'L', command: 'open-soql', telemetry: 'soql' },
+    { code: 'KeyY', key: 'Y', command: 'open-navigator', telemetry: 'navigator' },
+    { code: 'KeyK', key: 'K', command: 'open-debuglog', telemetry: 'debuglog' },
+    { code: 'KeyE', key: 'E', command: 'open-execanon', telemetry: 'execanon' }
+  ];
+
+  const PANELS = {
+    'open-search-palette': () => PALETTE,
+    'open-inspector': () => INSPECTOR,
+    'open-soql': () => SOQL,
+    'open-navigator': () => NAVIGATOR,
+    'open-debuglog': () => DEBUGLOG,
+    'open-execanon': () => EXECANON
+  };
+
+  function _matchShortcut(e) {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey) return null;
+    const key = e.key ? e.key.toUpperCase() : '';
+    return SHORTCUTS.find(s => e.code === s.code || key === s.key) || null;
+  }
+
+  // The same physical keypress reaches both the window and document capture
+  // listeners; only act on it once.
+  const _handledKeyEvents = new WeakSet();
+
   function _handleKeyboard(e) {
-    if (!e.key) return;
-    const key = e.key.toUpperCase();
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'P') {
+    if (!e.key && !e.code) return;
+
+    const shortcut = _matchShortcut(e);
+    if (shortcut) {
+      if (_handledKeyEvents.has(e)) return;
+      _handledKeyEvents.add(e);
       e.preventDefault(); e.stopPropagation();
-      PALETTE.toggle();
-      if (PALETTE.isVisible()) TELEMETRY.trackEvent('search', 'open');
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'X') {
-      e.preventDefault(); e.stopPropagation();
-      INSPECTOR.toggle();
-      if (INSPECTOR.isVisible()) TELEMETRY.trackEvent('inspector', 'open');
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'L') {
-      e.preventDefault(); e.stopPropagation();
-      SOQL.toggle();
-      if (SOQL.isVisible()) TELEMETRY.trackEvent('soql', 'open');
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Y') {
-      e.preventDefault(); e.stopPropagation();
-      NAVIGATOR.toggle();
-      if (NAVIGATOR.isVisible()) TELEMETRY.trackEvent('navigator', 'open');
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'K') {
-      e.preventDefault(); e.stopPropagation();
-      DEBUGLOG.toggle();
-      if (DEBUGLOG.isVisible()) TELEMETRY.trackEvent('debuglog', 'open');
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'E') {
-      e.preventDefault(); e.stopPropagation();
-      EXECANON.toggle();
-      if (EXECANON.isVisible()) TELEMETRY.trackEvent('execanon', 'open');
+      _runCommand(shortcut.command, { toggle: true, telemetry: shortcut.telemetry });
       return;
     }
 
     if (e.key === 'Escape') {
+      if (_handledKeyEvents.has(e)) return;
+      _handledKeyEvents.add(e);
       e.preventDefault();
       let closed = false;
-      if (PALETTE.isVisible()) { PALETTE.hide(); closed = true; }
-      if (NAVIGATOR.isVisible()) { NAVIGATOR.hide(); closed = true; }
-      if (SOQL.isVisible()) { SOQL.hide(); closed = true; }
-      if (INSPECTOR.isVisible()) { INSPECTOR.hide(); closed = true; }
-      if (DEBUGLOG.isVisible()) { DEBUGLOG.hide(); closed = true; }
-      if (EXECANON.isVisible()) { EXECANON.hide(); closed = true; }
-      if (DEPGRAPH.isVisible()) { DEPGRAPH.hide(); closed = true; }
+      for (const getPanel of Object.values(PANELS)) {
+        const panel = getPanel();
+        if (panel && panel.isVisible()) { panel.hide(); closed = true; }
+      }
       // Also collapse the toolbar
       const toolbarContainer = SHADOW.getOrCreate('toolbar').container;
       const toolbar = toolbarContainer.querySelector('#sfdt-toolbar');
@@ -186,6 +187,16 @@
       }
       if (closed) return;
     }
+  }
+
+  function _runCommand(command, opts = {}) {
+    const panel = PANELS[command] && PANELS[command]();
+    if (!panel) return;
+    const telemetry = opts.telemetry
+      || (SHORTCUTS.find(s => s.command === command) || {}).telemetry;
+    if (TELEMETRY && telemetry) TELEMETRY.trackEvent(telemetry, 'open');
+    if (opts.toggle) panel.toggle();
+    else panel.show(opts.prefill);
   }
 
   // ─── Context Menu Record Detection ────────────────────
@@ -221,23 +232,32 @@
     if (target && target.closest && target.closest('[id^="sfdt-host-"]')) return;
 
     // Close any visible side panels ONLY if they are not pinned
-    if (INSPECTOR.isVisible() && !INSPECTOR.isPinned()) INSPECTOR.hide();
-    if (SOQL.isVisible() && !SOQL.isPinned()) SOQL.hide();
-    if (DEBUGLOG.isVisible() && !DEBUGLOG.isPinned()) DEBUGLOG.hide();
-    if (EXECANON.isVisible() && !EXECANON.isPinned()) EXECANON.hide();
+    for (const panel of [INSPECTOR, SOQL, DEBUGLOG, EXECANON]) {
+      if (panel && panel.isVisible() && !panel.isPinned()) panel.hide();
+    }
   }
 
   // ─── Message Handler (from background/popup) ─────────
 
-  function _handleMessage(message) {
+  function _handleMessage(message, sender, sendResponse) {
     window._sfdtLogger.log('[SFDT] Received message:', message.action);
     switch (message.action) {
-      case 'open-search-palette': PALETTE.show(); break;
-      case 'open-inspector': INSPECTOR.show(); break;
-      case 'open-soql': SOQL.show(); break;
-      case 'open-navigator': NAVIGATOR.show(); break;
-      case 'open-debuglog': DEBUGLOG.show(); break;
-      case 'open-execanon': EXECANON.show(); break;
+      case 'ping':
+        // Liveness probe — lets the service worker tell "not injected" apart
+        // from "injected but the shortcut silently failed".
+        sendResponse({ pong: true });
+        return false;
+      case 'open-search-palette':
+      case 'open-inspector':
+      case 'open-soql':
+      case 'open-navigator':
+      case 'open-debuglog':
+      case 'open-execanon':
+        _runCommand(message.action, {
+          toggle: !!message.toggle,
+          prefill: message.prefill
+        });
+        break;
       case 'cache-invalidated':
         META.invalidateCache();
         META.buildIndex();
@@ -311,13 +331,12 @@
       btn.addEventListener('click', () => {
         toolbar.classList.remove('expanded');
         switch (btn.dataset.action) {
-          case 'search': PALETTE.toggle(); TELEMETRY.trackEvent('search', 'open'); break;
-          case 'inspector': INSPECTOR.toggle(); TELEMETRY.trackEvent('inspector', 'open'); break;
-          case 'soql': SOQL.toggle(); TELEMETRY.trackEvent('soql', 'open'); break;
-          case 'navigator': NAVIGATOR.toggle(); TELEMETRY.trackEvent('navigator', 'open'); break;
-          case 'debuglog': DEBUGLOG.toggle(); TELEMETRY.trackEvent('debuglog', 'open'); break;
-          case 'execanon': EXECANON.toggle(); TELEMETRY.trackEvent('execanon', 'open'); break;
-
+          case 'search': if (TELEMETRY) TELEMETRY.trackEvent('search', 'open'); PALETTE.toggle(); break;
+          case 'inspector': if (TELEMETRY) TELEMETRY.trackEvent('inspector', 'open'); INSPECTOR.toggle(); break;
+          case 'soql': if (TELEMETRY) TELEMETRY.trackEvent('soql', 'open'); SOQL.toggle(); break;
+          case 'navigator': if (TELEMETRY) TELEMETRY.trackEvent('navigator', 'open'); NAVIGATOR.toggle(); break;
+          case 'debuglog': if (TELEMETRY) TELEMETRY.trackEvent('debuglog', 'open'); DEBUGLOG.toggle(); break;
+          case 'execanon': if (TELEMETRY) TELEMETRY.trackEvent('execanon', 'open'); EXECANON.toggle(); break;
           case 'refresh-cache':
             META.invalidateCache();
             META.buildIndex();

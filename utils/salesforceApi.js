@@ -368,13 +368,6 @@ const SalesforceAPI = (() => {
     });
   }
 
-  async function toolingPatch(sobjectType, recordId, data) {
-    return _fetch(`/services/data/${API_VERSION}/tooling/sobjects/${encodeURIComponent(sobjectType)}/${encodeURIComponent(recordId)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data)
-    });
-  }
-
   async function toolingDelete(sobjectType, recordId) {
     return _fetch(`/services/data/${API_VERSION}/tooling/sobjects/${encodeURIComponent(sobjectType)}/${encodeURIComponent(recordId)}`, {
       method: 'DELETE'
@@ -477,95 +470,13 @@ const SalesforceAPI = (() => {
     return _fetch(`/services/data/${API_VERSION}/limits/`);
   }
 
-  // ─── SOAP Metadata API ────────────────────────────────────────
-
-  function _soapVersion() {
-    return API_VERSION.replace('v', ''); // 'v59.0' → '59.0'
-  }
-
-  /**
-   * Make a SOAP call to the Metadata API.
-   * Handles both same-origin (direct fetch) and cross-origin (background proxy).
-   */
-  async function _soapFetch(envelope) {
-    const url = `${getInstanceUrl()}/services/Soap/m/${_soapVersion()}`;
-    const headers = {
-      'Content-Type': 'text/xml; charset=UTF-8',
-      'SOAPAction': '""'
-    };
-
-    if (_isCrossOrigin()) {
-      const resp = await _bgFetch(url, {
-        method: 'POST',
-        headers,
-        body: envelope
-      }, 'text');
-      if (!resp.ok) throw new Error(`Metadata API ${resp.status}: ${resp.body}`);
-      return resp.body;
-    } else {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: envelope,
-        credentials: 'include'
-      });
-      return await resp.text();
-    }
-  }
-
-  /**
-   * Read metadata via SOAP Metadata API. Returns raw XML response text.
-   */
-  async function metadataRead(type, fullName) {
-    const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/" xmlns:md="http://soap.sforce.com/2006/04/metadata">
-  <env:Header><md:SessionHeader><md:sessionId>${_sessionId}</md:sessionId></md:SessionHeader></env:Header>
-  <env:Body>
-    <md:readMetadata>
-      <md:type>${type}</md:type>
-      <md:fullNames>${_xmlEscape(fullName)}</md:fullNames>
-    </md:readMetadata>
-  </env:Body>
-</env:Envelope>`;
-    return await _soapFetch(envelope);
-  }
-
-  /**
-   * Update metadata via SOAP Metadata API. metadataInnerXml is the inner XML
-   * of the <met:metadata> element (e.g. <met:fullName>...</met:fullName><met:layoutSections>...</met:layoutSections>).
-   */
-  async function metadataUpdate(metadataInnerXml) {
-    const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/" xmlns:md="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <env:Header><md:SessionHeader><md:sessionId>${_sessionId}</md:sessionId></md:SessionHeader></env:Header>
-  <env:Body>
-    <md:updateMetadata>
-      <md:metadata xsi:type="md:Layout">
-        ${metadataInnerXml}
-      </md:metadata>
-    </md:updateMetadata>
-  </env:Body>
-</env:Envelope>`;
-    const responseXml = await _soapFetch(envelope);
-    // Check for success
-    if (responseXml.includes('<success>true</success>')) return true;
-    // Extract error message
-    const msgMatch = responseXml.match(/<(?:\w+:)?message>([^<]+)<\/(?:\w+:)?message>/);
-    throw new Error('Metadata API: ' + (msgMatch ? msgMatch[1] : 'Update failed. Response: ' + responseXml.substring(0, 500)));
-  }
-
-  function _xmlEscape(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
   return {
     connect, getSessionId, getInstanceUrl, getOrgId, isConnected,
     restQuery, restGet, restPatch, restPost, restDelete,
-    toolingQuery, toolingQueryAll, toolingGet, toolingPost, toolingPatch, toolingDelete, toolingSearch,
+    toolingQuery, toolingQueryAll, toolingGet, toolingPost, toolingDelete, toolingSearch,
     globalSearch, parameterizedSearch,
     describeGlobal, describeSObject, composite, getRecord,
     getDebugLogs, getDebugLogBody, executeAnonymous, getCurrentUser, getLimits,
-    metadataRead, metadataUpdate,
     API_VERSION
   };
 })();

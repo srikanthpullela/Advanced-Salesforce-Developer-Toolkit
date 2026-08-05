@@ -12,6 +12,7 @@ A VS Code-style command palette for instant search across your entire Salesforce
 
 - Search across **12+ categories**: Apex Classes, Triggers, LWC, Aura Components, Flows, Validation Rules, Custom Objects, Fields, Visualforce Pages, Reports, and Records
 - **Two search modes**: Quick Search (local index + SOSL) and Deep Search (code bodies, field labels, all custom objects)
+- **Flexible field & setting search** — find any field across **all** your Custom Settings by any word combination, in any order, with or without spaces (e.g. `Column Threshold`, `ColumnRenderThreshold`, or `Render Threshold` all find **Column Render Threshold**). Every Custom Setting is always searched, matches are ranked by relevance, and each result shows the parent setting it belongs to (e.g. *Config System Properties*)
 - **Auto Search toggle** — enable to search automatically as you type (500ms debounce, fires both normal + deep search)
 - Smart metadata indexing with automatic cache management
 - Search history (up to 30 recent searches)
